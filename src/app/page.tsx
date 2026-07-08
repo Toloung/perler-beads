@@ -3,6 +3,8 @@
 import React, { useState, useRef, ChangeEvent, DragEvent, useEffect, useMemo, useCallback } from 'react';
 import Script from 'next/script';
 import InstallPWA from '../components/InstallPWA';
+import CanvasToolsModal from '../components/CanvasToolsModal';
+import ImageEditorModal from '../components/ImageEditorModal';
 
 // 导入像素化工具和类型
 import {
@@ -92,10 +94,32 @@ import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
 import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtils';
+import {
+  ClipboardGrid,
+  GridSelection,
+  clearSelection,
+  copySelection,
+  normalizeSelection,
+  pasteClipboard,
+  recalculateGridStats,
+  resizeGrid
+} from '../utils/gridEditing';
 
-// 1. 导入新的 DonationModal 组件
-import DonationModal from '../components/DonationModal';
 import FocusModePreDownloadModal from '../components/FocusModePreDownloadModal';
+import ModernWorkspaceShell from '../components/ModernWorkspaceShell';
+import { ConflictModal, ProjectListModal, ProjectToolbar } from '../components/ProjectManager';
+import ShareCodeModal from '../components/ShareCodeModal';
+import { ProjectDetail, ProjectState, ProjectSummary, SaveStatus, VersionConflict } from '../types/projectTypes';
+import {
+  createProjectOnServer,
+  deleteProjectOnServer,
+  fetchProject,
+  fetchProjects,
+  isVersionConflict,
+  renameProjectOnServer,
+  updateProjectOnServer
+} from '../utils/projectApiClient';
+import { createShareCode, readShareCode } from '../utils/shareCode';
 
 export default function Home() {
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
@@ -127,8 +151,6 @@ export default function Home() {
   const [selectedColor, setSelectedColor] = useState<MappedPixel | null>(null);
   // 新增：一键擦除模式状态
   const [isEraseMode, setIsEraseMode] = useState<boolean>(false);
-  // 新增状态变量：控制打赏弹窗
-  const [isDonationModalOpen, setIsDonationModalOpen] = useState<boolean>(false);
   const [customPaletteSelections, setCustomPaletteSelections] = useState<PaletteSelections>({});
   const [isCustomPaletteEditorOpen, setIsCustomPaletteEditorOpen] = useState<boolean>(false);
   const [isCustomPalette, setIsCustomPalette] = useState<boolean>(false);
@@ -202,6 +224,25 @@ export default function Home() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2000);
   }, []);
+
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectName, setCurrentProjectName] = useState<string>('未命名项目');
+  const [currentProjectVersion, setCurrentProjectVersion] = useState<number>(0);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [isProjectsModalOpen, setIsProjectsModalOpen] = useState<boolean>(false);
+  const [isProjectsLoading, setIsProjectsLoading] = useState<boolean>(false);
+  const [versionConflict, setVersionConflict] = useState<VersionConflict | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareCode, setShareCode] = useState<string>('');
+  const [isShareCodeGenerating, setIsShareCodeGenerating] = useState<boolean>(false);
+  const [isImageEditorOpen, setIsImageEditorOpen] = useState<boolean>(false);
+  const [isCanvasToolsOpen, setIsCanvasToolsOpen] = useState<boolean>(false);
+  const [selectionClipboard, setSelectionClipboard] = useState<ClipboardGrid | null>(null);
+  const isRestoringProjectRef = useRef(false);
+  const skipNextPixelateRef = useRef(false);
+  const lastSavedSnapshotRef = useRef<string>('');
 
   // 放大镜切换处理函数
   const handleToggleMagnifier = () => {
@@ -600,6 +641,434 @@ export default function Home() {
     // 转换为dataURL
     return canvas.toDataURL('image/png');
   };
+
+  const handleCreateBlankCanvas = useCallback(() => {
+    const widthInput = window.prompt('请输入空白画布宽度（10-300）', '50');
+    if (widthInput === null) return;
+
+    const heightInput = window.prompt('请输入空白画布高度（10-300）', widthInput);
+    if (heightInput === null) return;
+
+    const clampSize = (value: string) => {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isNaN(parsed)) return 50;
+      return Math.min(300, Math.max(10, parsed));
+    };
+
+    const N = clampSize(widthInput);
+    const M = clampSize(heightInput);
+    const blankPixelData: MappedPixel[][] = Array.from({ length: M }, () =>
+      Array.from({ length: N }, () => ({ ...transparentColorData }))
+    );
+    const dimensions = { N, M };
+
+    skipNextPixelateRef.current = true;
+    setOriginalImageSrc(generateSyntheticImageFromPixelData(blankPixelData, dimensions));
+    setMappedPixelData(blankPixelData);
+    setGridDimensions(dimensions);
+    setColorCounts({});
+    setTotalBeadCount(0);
+    setInitialGridColorKeys(new Set());
+    setExcludedColorKeys(new Set());
+    setGranularity(N);
+    setGranularityInput(N.toString());
+    setSimilarityThresholdInput(similarityThreshold.toString());
+    setCurrentProjectId(null);
+    setCurrentProjectName(`空白画布 ${N}x${M}`);
+    setCurrentProjectVersion(0);
+    setIsManualColoringMode(true);
+    setSelectedColor(null);
+    setIsEraseMode(false);
+    setSaveStatus('dirty');
+    setHasUnsavedChanges(true);
+    showToast(`已创建空白画布 ${N}x${M}`);
+  }, [similarityThreshold, showToast]);
+
+  const generateProjectThumbnail = useCallback((pixelData: MappedPixel[][] | null, dimensions: { N: number; M: number } | null): string | null => {
+    if (!pixelData || !dimensions) return null;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) return null;
+
+    canvas.width = 160;
+    canvas.height = 160;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const cellSize = Math.max(1, Math.floor(Math.min(canvas.width / dimensions.N, canvas.height / dimensions.M)));
+    const offsetX = Math.floor((canvas.width - dimensions.N * cellSize) / 2);
+    const offsetY = Math.floor((canvas.height - dimensions.M * cellSize) / 2);
+
+    pixelData.forEach((row, rowIndex) => {
+      row.forEach((cell, colIndex) => {
+        ctx.fillStyle = cell?.isExternal ? '#ffffff' : cell?.color || '#ffffff';
+        ctx.fillRect(offsetX + colIndex * cellSize, offsetY + rowIndex * cellSize, cellSize, cellSize);
+      });
+    });
+
+    return canvas.toDataURL('image/png');
+  }, []);
+
+  const buildProjectState = useCallback((): ProjectState => ({
+    originalImageSrc,
+    granularity,
+    similarityThreshold,
+    pixelationMode,
+    selectedColorSystem,
+    customPaletteSelections,
+    excludedColorKeys: Array.from(excludedColorKeys),
+    initialGridColorKeys: Array.from(initialGridColorKeys),
+    mappedPixelData,
+    gridDimensions,
+    colorCounts,
+    totalBeadCount,
+    downloadOptions,
+  }), [
+    originalImageSrc,
+    granularity,
+    similarityThreshold,
+    pixelationMode,
+    selectedColorSystem,
+    customPaletteSelections,
+    excludedColorKeys,
+    initialGridColorKeys,
+    mappedPixelData,
+    gridDimensions,
+    colorCounts,
+    totalBeadCount,
+    downloadOptions,
+  ]);
+
+  const restoreProjectState = useCallback((state: ProjectState, options: {
+    id: string | null;
+    name: string;
+    version: number;
+  }) => {
+    isRestoringProjectRef.current = true;
+    skipNextPixelateRef.current = true;
+
+    setCurrentProjectId(options.id);
+    setCurrentProjectName(options.name);
+    setCurrentProjectVersion(options.version);
+    setOriginalImageSrc(state.originalImageSrc);
+    setGranularity(state.granularity);
+    setGranularityInput(state.granularity.toString());
+    setSimilarityThreshold(state.similarityThreshold);
+    setSimilarityThresholdInput(state.similarityThreshold.toString());
+    setPixelationMode(state.pixelationMode);
+    setSelectedColorSystem(state.selectedColorSystem as ColorSystem);
+    setCustomPaletteSelections(state.customPaletteSelections);
+    setExcludedColorKeys(new Set(state.excludedColorKeys));
+    setInitialGridColorKeys(new Set(state.initialGridColorKeys));
+    setMappedPixelData(state.mappedPixelData);
+    setGridDimensions(state.gridDimensions);
+    setColorCounts(state.colorCounts);
+    setTotalBeadCount(state.totalBeadCount);
+    setDownloadOptions(state.downloadOptions);
+    setIsManualColoringMode(false);
+    setSelectedColor(null);
+    setIsEraseMode(false);
+    setVersionConflict(null);
+    setSaveStatus('saved');
+    setHasUnsavedChanges(false);
+    lastSavedSnapshotRef.current = JSON.stringify(state);
+
+    window.setTimeout(() => {
+      isRestoringProjectRef.current = false;
+    }, 0);
+  }, []);
+
+  const applyProject = useCallback((project: ProjectDetail) => {
+    restoreProjectState(project.state_json, {
+      id: project.id,
+      name: project.name,
+      version: project.version,
+    });
+  }, [restoreProjectState]);
+
+  const refreshProjects = useCallback(async () => {
+    setIsProjectsLoading(true);
+    try {
+      setProjects(await fetchProjects());
+    } catch (error) {
+      console.error('加载项目列表失败:', error);
+      showToast('加载项目列表失败');
+    } finally {
+      setIsProjectsLoading(false);
+    }
+  }, [showToast]);
+
+  const persistProject = useCallback(async (options?: { saveAs?: boolean; force?: boolean }) => {
+    if (!mappedPixelData || !gridDimensions) {
+      showToast('请先生成拼豆图纸');
+      return;
+    }
+
+    const state = buildProjectState();
+    const thumbnail = generateProjectThumbnail(mappedPixelData, gridDimensions);
+    const name = currentProjectName.trim() || '未命名项目';
+
+    setSaveStatus('saving');
+    try {
+      const project = options?.saveAs || !currentProjectId
+        ? await createProjectOnServer({ name, thumbnail, state_json: state })
+        : await updateProjectOnServer({
+            id: currentProjectId,
+            name,
+            thumbnail,
+            state_json: state,
+            version: currentProjectVersion,
+            force: options?.force,
+          });
+
+      setCurrentProjectId(project.id);
+      setCurrentProjectName(project.name);
+      setCurrentProjectVersion(project.version);
+      setSaveStatus('saved');
+      setHasUnsavedChanges(false);
+      setVersionConflict(null);
+      lastSavedSnapshotRef.current = JSON.stringify(state);
+      showToast(options?.saveAs ? '已另存为新项目' : '已保存');
+      if (isProjectsModalOpen) {
+        refreshProjects();
+      }
+    } catch (error) {
+      if (isVersionConflict(error)) {
+        setVersionConflict(error);
+        setSaveStatus('conflict');
+        return;
+      }
+
+      console.error('保存项目失败:', error);
+      setSaveStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error');
+      showToast('保存失败，请手动重试');
+    }
+  }, [
+    mappedPixelData,
+    gridDimensions,
+    buildProjectState,
+    generateProjectThumbnail,
+    currentProjectName,
+    currentProjectId,
+    currentProjectVersion,
+    isProjectsModalOpen,
+    refreshProjects,
+    showToast,
+  ]);
+
+  const handleOpenProjects = useCallback(() => {
+    setIsProjectsModalOpen(true);
+    refreshProjects();
+  }, [refreshProjects]);
+
+  const handleOpenProject = useCallback(async (id: string) => {
+    if (hasUnsavedChanges && !window.confirm('当前有未保存修改，打开其他项目会覆盖当前页面状态。继续吗？')) {
+      return;
+    }
+
+    try {
+      const project = await fetchProject(id);
+      applyProject(project);
+      setIsProjectsModalOpen(false);
+      showToast('项目已打开');
+    } catch (error) {
+      console.error('打开项目失败:', error);
+      showToast('打开项目失败');
+    }
+  }, [applyProject, hasUnsavedChanges, showToast]);
+
+  const handleRenameProject = useCallback(async (project: ProjectSummary) => {
+    const name = window.prompt('输入新的项目名称', project.name);
+    if (!name) return;
+
+    try {
+      const renamed = await renameProjectOnServer(project.id, name);
+      if (project.id === currentProjectId) {
+        setCurrentProjectName(renamed.name);
+      }
+      refreshProjects();
+      showToast('项目已重命名');
+    } catch (error) {
+      console.error('重命名项目失败:', error);
+      showToast('重命名失败');
+    }
+  }, [currentProjectId, refreshProjects, showToast]);
+
+  const handleDeleteProject = useCallback(async (project: ProjectSummary) => {
+    if (!window.confirm(`确定删除“${project.name}”吗？`)) return;
+
+    try {
+      await deleteProjectOnServer(project.id);
+      if (project.id === currentProjectId) {
+        setCurrentProjectId(null);
+        setCurrentProjectVersion(0);
+        setSaveStatus('dirty');
+        setHasUnsavedChanges(true);
+      }
+      refreshProjects();
+      showToast('项目已删除');
+    } catch (error) {
+      console.error('删除项目失败:', error);
+      showToast('删除失败');
+    }
+  }, [currentProjectId, refreshProjects, showToast]);
+
+  const handleGenerateShareCode = useCallback(async (password?: string) => {
+    if (!mappedPixelData || !gridDimensions) {
+      showToast('请先生成拼豆图纸');
+      return;
+    }
+
+    setIsShareCodeGenerating(true);
+    try {
+      const code = await createShareCode({
+        name: currentProjectName.trim() || '未命名项目',
+        state: buildProjectState(),
+        password,
+      });
+      setShareCode(code);
+      await navigator.clipboard?.writeText(code);
+      showToast('分享码已生成');
+    } catch (error) {
+      console.error('生成分享码失败:', error);
+      showToast('生成分享码失败');
+    } finally {
+      setIsShareCodeGenerating(false);
+    }
+  }, [mappedPixelData, gridDimensions, currentProjectName, buildProjectState, showToast]);
+
+  const handleImportShareCode = useCallback(async (code: string, password?: string) => {
+    try {
+      const sharedProject = await readShareCode(code, password);
+      restoreProjectState(sharedProject.state, {
+        id: null,
+        name: `${sharedProject.name || '分享作品'} 副本`,
+        version: 0,
+      });
+      setSaveStatus('dirty');
+      setHasUnsavedChanges(true);
+      setIsShareModalOpen(false);
+      showToast('分享码已导入');
+    } catch (error) {
+      console.error('导入分享码失败:', error);
+      showToast(error instanceof Error ? error.message : '导入分享码失败');
+    }
+  }, [restoreProjectState, showToast]);
+
+  const handleApplyEditedImage = useCallback((editedImageSrc: string) => {
+    setOriginalImageSrc(editedImageSrc);
+    setRemapTrigger(prev => prev + 1);
+    setIsManualColoringMode(false);
+    setSelectedColor(null);
+    setIsEraseMode(false);
+    setIsImageEditorOpen(false);
+    setSaveStatus('dirty');
+    setHasUnsavedChanges(true);
+    showToast('图片编辑已应用');
+  }, [showToast]);
+
+  const applyGridEdit = useCallback((nextPixelData: MappedPixel[][], nextDimensions?: { N: number; M: number }) => {
+    saveEditSnapshot();
+    const stats = recalculateGridStats(nextPixelData);
+    setMappedPixelData(nextPixelData);
+    if (nextDimensions) {
+      setGridDimensions(nextDimensions);
+      setGranularity(nextDimensions.N);
+      setGranularityInput(nextDimensions.N.toString());
+    }
+    setColorCounts(stats.colorCounts);
+    setTotalBeadCount(stats.totalBeadCount);
+    setInitialGridColorKeys(stats.initialGridColorKeys);
+    setSaveStatus('dirty');
+    setHasUnsavedChanges(true);
+  }, [saveEditSnapshot]);
+
+  const handleResizeCanvas = useCallback((width: number, height: number, anchor: 'top-left' | 'center') => {
+    if (!mappedPixelData || !gridDimensions) return;
+
+    const nextDimensions = {
+      N: Math.min(300, Math.max(1, Math.round(width))),
+      M: Math.min(300, Math.max(1, Math.round(height))),
+    };
+    if (nextDimensions.N === gridDimensions.N && nextDimensions.M === gridDimensions.M) {
+      showToast('画布尺寸未变化');
+      return;
+    }
+
+    applyGridEdit(resizeGrid(mappedPixelData, gridDimensions, nextDimensions, anchor), nextDimensions);
+    showToast(`画布尺寸已调整为 ${nextDimensions.N}x${nextDimensions.M}`);
+  }, [mappedPixelData, gridDimensions, applyGridEdit, showToast]);
+
+  const handleCopySelection = useCallback((selection: GridSelection) => {
+    if (!mappedPixelData || !gridDimensions) return;
+    const normalized = normalizeSelection(selection, gridDimensions);
+    setSelectionClipboard(copySelection(mappedPixelData, normalized));
+    showToast('选区已复制');
+  }, [mappedPixelData, gridDimensions, showToast]);
+
+  const handleCutSelection = useCallback((selection: GridSelection) => {
+    if (!mappedPixelData || !gridDimensions) return;
+    const normalized = normalizeSelection(selection, gridDimensions);
+    setSelectionClipboard(copySelection(mappedPixelData, normalized));
+    applyGridEdit(clearSelection(mappedPixelData, normalized));
+    showToast('选区已剪切');
+  }, [mappedPixelData, gridDimensions, applyGridEdit, showToast]);
+
+  const handleDeleteSelection = useCallback((selection: GridSelection) => {
+    if (!mappedPixelData || !gridDimensions) return;
+    applyGridEdit(clearSelection(mappedPixelData, normalizeSelection(selection, gridDimensions)));
+    showToast('选区已删除');
+  }, [mappedPixelData, gridDimensions, applyGridEdit, showToast]);
+
+  const handlePasteSelection = useCallback((row: number, col: number) => {
+    if (!mappedPixelData || !gridDimensions || !selectionClipboard) return;
+    applyGridEdit(pasteClipboard(mappedPixelData, gridDimensions, selectionClipboard, row, col));
+    showToast('选区已粘贴');
+  }, [mappedPixelData, gridDimensions, selectionClipboard, applyGridEdit, showToast]);
+
+  useEffect(() => {
+    if (!isMounted || isRestoringProjectRef.current || !mappedPixelData || !gridDimensions) {
+      return;
+    }
+
+    const snapshot = JSON.stringify(buildProjectState());
+    if (snapshot === lastSavedSnapshotRef.current) {
+      return;
+    }
+
+    setHasUnsavedChanges(true);
+    setSaveStatus(prev => (prev === 'saving' || prev === 'conflict' ? prev : 'dirty'));
+  }, [
+    isMounted,
+    buildProjectState,
+    mappedPixelData,
+    gridDimensions,
+  ]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges || saveStatus === 'saving' || saveStatus === 'conflict' || !mappedPixelData || !gridDimensions) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      persistProject();
+    }, 4000);
+
+    return () => window.clearTimeout(timer);
+  }, [hasUnsavedChanges, saveStatus, mappedPixelData, gridDimensions, persistProject]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const processFile = (file: File) => {
     // 检查文件类型
@@ -1057,6 +1526,11 @@ export default function Home() {
 
   // 修改useEffect中的pixelateImage调用，加入模式参数
   useEffect(() => {
+    if (skipNextPixelateRef.current) {
+      skipNextPixelateRef.current = false;
+      return;
+    }
+
     if (originalImageSrc && activeBeadPalette.length > 0) {
        const timeoutId = setTimeout(() => {
          if (originalImageSrc && originalCanvasRef.current && pixelatedCanvasRef.current && activeBeadPalette.length > 0) {
@@ -1107,7 +1581,9 @@ export default function Home() {
 
   // 强制显示专业工作台弹窗（每次进入页面都弹，引导用户前往新版）
   useEffect(() => {
-    setShowDesktopModal(true);
+    if (process.env.NEXT_PUBLIC_SHOW_DESKTOP_MODAL === 'true') {
+      setShowDesktopModal(true);
+    }
   }, []);
 
   // 添加URL重定向检查
@@ -1116,7 +1592,11 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       const currentUrl = window.location.href;
       const currentHostname = window.location.hostname;
-      const targetDomain = 'https://perlerbeadsold.zippland.com/';
+      const targetDomain = process.env.NEXT_PUBLIC_CANONICAL_URL;
+
+      if (!targetDomain) {
+        return;
+      }
       
       // 排除localhost和127.0.0.1等本地开发环境
       const isLocalhost = currentHostname === 'localhost' || 
@@ -1959,6 +2439,70 @@ export default function Home() {
     return sortColorsByHue(selectedColors);
   }, [customPaletteSelections, selectedColorSystem]);
 
+  if (!originalImageSrc) {
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: floatAnimation }} />
+        <InstallPWA />
+        <input
+          type="file"
+          accept="image/jpeg, image/png, image/gif, .csv, text/csv, application/csv, text/plain"
+          onChange={handleFileChange}
+          ref={fileInputRef}
+          className="hidden"
+        />
+        <ModernWorkspaceShell
+          selectedColorSystem={selectedColorSystem}
+          colorCount={Object.values(customPaletteSelections).filter(Boolean).length}
+          saveStatus={saveStatus}
+          hasCanvas={false}
+          onUpload={triggerFileInput}
+          onCreateBlank={handleCreateBlankCanvas}
+          onOpenProjects={handleOpenProjects}
+          onSave={() => persistProject()}
+          onSaveAs={() => persistProject({ saveAs: true })}
+          onDownload={() => setIsDownloadSettingsOpen(true)}
+          onShare={() => setIsShareModalOpen(true)}
+          onImportShare={() => setIsShareModalOpen(true)}
+        />
+        <ProjectListModal
+          open={isProjectsModalOpen}
+          loading={isProjectsLoading}
+          projects={projects}
+          onClose={() => setIsProjectsModalOpen(false)}
+          onRefresh={refreshProjects}
+          onOpen={handleOpenProject}
+          onRename={handleRenameProject}
+          onDelete={handleDeleteProject}
+        />
+        <ConflictModal
+          conflict={versionConflict}
+          onLoadServer={() => {
+            if (currentProjectId) {
+              handleOpenProject(currentProjectId);
+            }
+          }}
+          onOverwrite={() => persistProject({ force: true })}
+          onSaveAs={() => persistProject({ saveAs: true })}
+        />
+        <ShareCodeModal
+          open={isShareModalOpen}
+          shareCode={shareCode}
+          isGenerating={isShareCodeGenerating}
+          canShare={Boolean(mappedPixelData && gridDimensions)}
+          onClose={() => setIsShareModalOpen(false)}
+          onGenerate={handleGenerateShareCode}
+          onImport={handleImportShareCode}
+        />
+        {toastMessage && (
+          <div className="fixed bottom-4 left-1/2 z-[200] -translate-x-1/2 rounded-lg bg-gray-800 px-4 py-2 text-sm text-white shadow-lg">
+            {toastMessage}
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
     {/* 添加自定义动画样式 */}
@@ -2079,10 +2623,10 @@ export default function Home() {
 
             {/* Ultra fancy brand name and tool name with hyper cute decorations */}
             <div className="relative flex flex-col items-center space-y-3">
-              {/* Brand name - 七卡瓦 with ultra fancy effects */}
+              {/* Brand name */}
               <div className="relative">
                 <h1 className="relative text-4xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 via-blue-500 to-cyan-400 tracking-wider drop-shadow-2xl transform hover:scale-105 transition-transform duration-300">
-                  七卡瓦
+                  拼豆
                 </h1>
                 
                 {/* Super fancy geometric decorations */}
@@ -2233,6 +2777,26 @@ export default function Home() {
 
       {/* Apply dark mode styles to the main section */}
       <main ref={mainRef} className="w-full md:max-w-4xl flex flex-col items-center space-y-5 sm:space-y-6 relative overflow-hidden">
+        <ProjectToolbar
+          projectName={currentProjectName}
+          saveStatus={saveStatus}
+          disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'}
+          onSave={() => persistProject()}
+          onSaveAs={() => persistProject({ saveAs: true })}
+          onOpenProjects={handleOpenProjects}
+          onEditImage={() => setIsImageEditorOpen(true)}
+          onCanvasTools={() => setIsCanvasToolsOpen(true)}
+          onShare={() => setIsShareModalOpen(true)}
+          onImportShare={() => setIsShareModalOpen(true)}
+          onNameChange={(name) => {
+            setCurrentProjectName(name);
+            if (mappedPixelData && gridDimensions) {
+              setHasUnsavedChanges(true);
+              setSaveStatus('dirty');
+            }
+          }}
+        />
+
         {/* Apply dark mode styles to the Drop Zone */}
         <div
           onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragOver}
@@ -2766,32 +3330,11 @@ export default function Home() {
 
       {/* Apply dark mode styles to the Footer */}
       <footer className="w-full md:max-w-4xl mt-10 mb-6 py-6 text-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800/50 rounded-lg shadow-inner">
-
-        {/* Donation button styles are likely fine */}
-        <button
-          onClick={() => setIsDonationModalOpen(true)}
-          className="mb-5 px-6 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full shadow-lg transition-all duration-300 hover:shadow-xl hover:translate-y-[-2px] flex items-center justify-center mx-auto"
-        >
-          {/* SVG and Text inside button */}
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8h1a2 2 0 0 1 2 2v1c0 1.1-.9 2-2 2h-1" fill="#f9a8d4" />
-            <path d="M6 8h12v9a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V8z" fill="#f9a8d4" />
-            <path d="M6 8V7a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v1" fill="#f472b6" />
-            <path d="M12 16v-4" stroke="#7d2a5a" />
-            <path d="M9.5 14.5L9 16" stroke="#7d2a5a" />
-            <path d="M14.5 14.5L15 16" stroke="#7d2a5a" />
-          </svg>
-          <span>请作者喝一杯奶茶</span>
-        </button>
-
         {/* Copyright text color */}
         <p className="font-medium text-gray-600 dark:text-gray-300">
-          七卡瓦 拼豆底稿生成器 &copy; {new Date().getFullYear()}
+          拼豆底稿生成器 &copy; {new Date().getFullYear()}
         </p>
       </footer>
-
-      {/* Donation Modal - 现在使用新的组件 */}
-      <DonationModal isOpen={isDonationModalOpen} onClose={() => setIsDonationModalOpen(false)} />
 
       {/* 使用导入的下载设置弹窗组件 */}
       <DownloadSettingsModal 
@@ -2810,6 +3353,57 @@ export default function Home() {
         mappedPixelData={mappedPixelData}
         gridDimensions={gridDimensions}
         selectedColorSystem={selectedColorSystem}
+      />
+
+      <ProjectListModal
+        open={isProjectsModalOpen}
+        loading={isProjectsLoading}
+        projects={projects}
+        onClose={() => setIsProjectsModalOpen(false)}
+        onRefresh={refreshProjects}
+        onOpen={handleOpenProject}
+        onRename={handleRenameProject}
+        onDelete={handleDeleteProject}
+      />
+
+      <ConflictModal
+        conflict={versionConflict}
+        onLoadServer={() => {
+          if (currentProjectId) {
+            handleOpenProject(currentProjectId);
+          }
+        }}
+        onOverwrite={() => persistProject({ force: true })}
+        onSaveAs={() => persistProject({ saveAs: true })}
+      />
+
+      <ShareCodeModal
+        open={isShareModalOpen}
+        shareCode={shareCode}
+        isGenerating={isShareCodeGenerating}
+        canShare={Boolean(mappedPixelData && gridDimensions)}
+        onClose={() => setIsShareModalOpen(false)}
+        onGenerate={handleGenerateShareCode}
+        onImport={handleImportShareCode}
+      />
+
+      <ImageEditorModal
+        open={isImageEditorOpen}
+        imageSrc={originalImageSrc}
+        onClose={() => setIsImageEditorOpen(false)}
+        onApply={handleApplyEditedImage}
+      />
+
+      <CanvasToolsModal
+        open={isCanvasToolsOpen}
+        dimensions={gridDimensions}
+        hasClipboard={Boolean(selectionClipboard)}
+        onClose={() => setIsCanvasToolsOpen(false)}
+        onResize={handleResizeCanvas}
+        onCopy={handleCopySelection}
+        onCut={handleCutSelection}
+        onDelete={handleDeleteSelection}
+        onPaste={handlePasteSelection}
       />
 
       {/* 轻量提示 Toast */}
