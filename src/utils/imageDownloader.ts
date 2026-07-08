@@ -239,7 +239,18 @@ export async function downloadImage({
     const downloadCellSize = 30;
   
     // 从下载选项中获取设置
-    const { showGrid, gridInterval, showCoordinates, gridLineColor, includeStats, showCellNumbers = true } = options;
+    const {
+      showGrid,
+      gridInterval,
+      showCoordinates,
+      gridLineColor,
+      includeStats,
+      showCellNumbers = true,
+      watermarkEnabled = true,
+      watermarkText = '@拼豆',
+      watermarkStyle = 'tile'
+    } = options;
+    const normalizedWatermarkText = watermarkText.trim() || '@拼豆';
   
     // 设置边距空间用于坐标轴标注（如果需要）
     const axisLabelSize = showCoordinates ? Math.max(30, Math.floor(downloadCellSize)) : 0;
@@ -619,36 +630,56 @@ export async function downloadImage({
       M * downloadCellSize
     );
 
-    // 副水印：放在网格左上角，简洁版本
-    const secondaryWatermarkFontSize = Math.max(10, Math.floor(downloadCellSize * 0.5));
-    const secondaryText = '@拼豆';
-    
-    ctx.font = `500 ${secondaryWatermarkFontSize}px system-ui, -apple-system, sans-serif`;
-    const secondaryMetrics = ctx.measureText(secondaryText);
-    const secondaryWidth = secondaryMetrics.width;
-    const secondaryHeight = secondaryWatermarkFontSize;
-    
-    const secondaryWatermarkX = extraLeftMargin + axisLabelSize + 15;
-    const secondaryWatermarkY = titleBarHeight + extraTopMargin + axisLabelSize + secondaryHeight + 15;
-    
-    // 副水印背景
-    const secondaryBgPadding = 4;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.beginPath();
-    ctx.roundRect(
-      secondaryWatermarkX - secondaryBgPadding,
-      secondaryWatermarkY - secondaryHeight - secondaryBgPadding,
-      secondaryWidth + secondaryBgPadding * 2,
-      secondaryHeight + secondaryBgPadding * 2,
-      3
-    );
-    ctx.fill();
-    
-    // 副水印文字
-    ctx.fillStyle = '#6B7280'; // 中等灰色，存在但不突兀
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(secondaryText, secondaryWatermarkX, secondaryWatermarkY);
+    if (watermarkEnabled) {
+      if (watermarkStyle === 'emboss') {
+        const embossFontSize = Math.max(36, Math.floor(Math.min(gridWidth, gridHeight) * 0.12));
+        const centerX = extraLeftMargin + axisLabelSize + gridWidth / 2;
+        const centerY = titleBarHeight + extraTopMargin + axisLabelSize + gridHeight / 2;
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(-Math.PI / 8);
+        ctx.font = `800 ${embossFontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(normalizedWatermarkText, -2, -2);
+        ctx.fillStyle = '#111827';
+        ctx.fillText(normalizedWatermarkText, 2, 2);
+        ctx.globalAlpha = 0.12;
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = Math.max(2, Math.floor(embossFontSize * 0.04));
+        ctx.strokeText(normalizedWatermarkText, 0, 0);
+        ctx.restore();
+      } else {
+        const secondaryWatermarkFontSize = Math.max(10, Math.floor(downloadCellSize * 0.5));
+        ctx.font = `500 ${secondaryWatermarkFontSize}px system-ui, -apple-system, sans-serif`;
+        const secondaryMetrics = ctx.measureText(normalizedWatermarkText);
+        const secondaryWidth = secondaryMetrics.width;
+        const secondaryHeight = secondaryWatermarkFontSize;
+
+        const secondaryWatermarkX = extraLeftMargin + axisLabelSize + 15;
+        const secondaryWatermarkY = titleBarHeight + extraTopMargin + axisLabelSize + secondaryHeight + 15;
+
+        const secondaryBgPadding = 4;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.beginPath();
+        ctx.roundRect(
+          secondaryWatermarkX - secondaryBgPadding,
+          secondaryWatermarkY - secondaryHeight - secondaryBgPadding,
+          secondaryWidth + secondaryBgPadding * 2,
+          secondaryHeight + secondaryBgPadding * 2,
+          3
+        );
+        ctx.fill();
+
+        ctx.fillStyle = '#6B7280';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(normalizedWatermarkText, secondaryWatermarkX, secondaryWatermarkY);
+      }
+    }
 
     // 绘制统计信息
     if (includeStats && colorCounts) {
@@ -745,41 +776,39 @@ export async function downloadImage({
       ctx.textAlign = 'right';
       ctx.fillText(`总计: ${totalBeadCount} 颗`, downloadWidth - statsPadding, totalY);
       
-      // 统计区域水印 - 第三重保护，清晰明显
-      const statsWatermarkFontSize = Math.max(10, Math.floor(statsFontSize * 0.7));
-      const statsWatermarkText = '图纸来源：拼豆';
-      
-      ctx.font = `500 ${statsWatermarkFontSize}px system-ui, -apple-system, sans-serif`;
-      const statsTextMetrics = ctx.measureText(statsWatermarkText);
-      const statsTextWidth = statsTextMetrics.width;
-      const statsTextHeight = statsWatermarkFontSize;
-      
-      const statsWatermarkX = statsPadding;
-      const statsWatermarkY = totalY + 20;
-      
-      // 统计区域水印背景
-      const statsBgPadding = 5;
-      ctx.fillStyle = 'rgba(248, 250, 252, 0.9)'; // 浅灰背景，更柔和
-      ctx.beginPath();
-      ctx.roundRect(
-        statsWatermarkX - statsBgPadding,
-        statsWatermarkY - statsTextHeight - statsBgPadding,
-        statsTextWidth + statsBgPadding * 2,
-        statsTextHeight + statsBgPadding * 2,
-        3
-      );
-      ctx.fill();
-      
-      // 统计区域水印边框
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      
-      // 统计区域水印文字
-      ctx.fillStyle = '#64748B'; // 清晰的深灰色
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(statsWatermarkText, statsWatermarkX, statsWatermarkY);
+      if (watermarkEnabled) {
+        const statsWatermarkFontSize = Math.max(10, Math.floor(statsFontSize * 0.7));
+        const statsWatermarkText = `图纸来源：${normalizedWatermarkText}`;
+
+        ctx.font = `500 ${statsWatermarkFontSize}px system-ui, -apple-system, sans-serif`;
+        const statsTextMetrics = ctx.measureText(statsWatermarkText);
+        const statsTextWidth = statsTextMetrics.width;
+        const statsTextHeight = statsWatermarkFontSize;
+
+        const statsWatermarkX = statsPadding;
+        const statsWatermarkY = totalY + 20;
+
+        const statsBgPadding = 5;
+        ctx.fillStyle = 'rgba(248, 250, 252, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(
+          statsWatermarkX - statsBgPadding,
+          statsWatermarkY - statsTextHeight - statsBgPadding,
+          statsTextWidth + statsBgPadding * 2,
+          statsTextHeight + statsBgPadding * 2,
+          3
+        );
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#64748B';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(statsWatermarkText, statsWatermarkX, statsWatermarkY);
+      }
       
       // 更新统计区域高度的计算 - 需要包含新增的顶部间距
       const footerHeight = 30; // 总计部分高度

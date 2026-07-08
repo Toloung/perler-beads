@@ -5,6 +5,7 @@ import { PaletteSelections } from '../utils/localStorageUtils';
 export type SaveStatus = 'saved' | 'saving' | 'dirty' | 'error' | 'conflict' | 'offline';
 
 export interface ProjectState {
+  canvasSource?: 'image' | 'blank' | 'csv';
   originalImageSrc: string | null;
   granularity: number;
   similarityThreshold: number;

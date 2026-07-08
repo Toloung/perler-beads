@@ -7,6 +7,7 @@ interface PixelatedPreviewCanvasProps {
   mappedPixelData: MappedPixel[][] | null;
   gridDimensions: { N: number; M: number } | null;
   isManualColoringMode: boolean;
+  continuousManualInput?: boolean;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   onInteraction: (
     clientX: number,
@@ -100,6 +101,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   mappedPixelData,
   gridDimensions,
   isManualColoringMode,
+  continuousManualInput = false,
   canvasRef,
   onInteraction,
   highlightColorKey,
@@ -108,6 +110,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const [darkModeState, setDarkModeState] = useState<boolean | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number; pageX: number; pageY: number } | null>(null);
   const touchMovedRef = useRef<boolean>(false);
+  const isMousePaintingRef = useRef(false);
   const [isHighlighting, setIsHighlighting] = useState(false);
 
   // Effect to detect dark mode changes and update state
@@ -161,6 +164,11 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   
   // 鼠标移动时显示提示
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (isManualColoringMode && continuousManualInput && isMousePaintingRef.current) {
+      onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, true);
+      return;
+    }
+
     // 只有在非手动模式下才通过mousemove显示tooltip，避免干扰手动上色
     if (!isManualColoringMode) {
         onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, false);
@@ -169,8 +177,20 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
   // 鼠标离开时隐藏提示
   const handleMouseLeave = () => {
+    isMousePaintingRef.current = false;
     // 鼠标离开时总是隐藏tooltip
     onInteraction(0, 0, 0, 0, false, true);
+  };
+
+  const handleMouseDown = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (isManualColoringMode && continuousManualInput) {
+      isMousePaintingRef.current = true;
+      onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, true);
+    }
+  };
+
+  const handleMouseUp = () => {
+    isMousePaintingRef.current = false;
   };
 
   // 鼠标点击处理（用于手动上色模式）
@@ -207,6 +227,13 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const handleTouchMove = (event: TouchEvent<HTMLCanvasElement>) => {
     const touch = event.touches[0];
     if (!touch || !touchStartPosRef.current) return;
+
+    if (isManualColoringMode && continuousManualInput) {
+      event.preventDefault();
+      touchMovedRef.current = true;
+      onInteraction(touch.clientX, touch.clientY, touch.pageX, touch.pageY, true);
+      return;
+    }
     
     const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
     const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
@@ -239,7 +266,9 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   return (
     <canvas
       ref={canvasRef}
+      onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
       onTouchStart={handleTouchStart}
@@ -251,10 +280,10 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       }`}
       style={{
         imageRendering: 'pixelated',
-        // touchAction: 'none' // 移除此行以允许页面滚动和缩放
+        touchAction: isManualColoringMode && continuousManualInput ? 'none' : 'auto'
       }}
     />
   );
 };
 
-export default PixelatedPreviewCanvas; 
+export default PixelatedPreviewCanvas;

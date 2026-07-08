@@ -1,4 +1,3 @@
-// 下载网格的选项类型定义
 export type GridDownloadOptions = {
   showGrid: boolean;
   gridInterval: number;
@@ -6,5 +5,8 @@ export type GridDownloadOptions = {
   showCellNumbers: boolean;
   gridLineColor: string;
   includeStats: boolean;
-  exportCsv: boolean; // 新增：是否同时导出CSV hex数据
+  exportCsv: boolean;
+  watermarkEnabled: boolean;
+  watermarkText: string;
+  watermarkStyle: 'tile' | 'emboss';
 };

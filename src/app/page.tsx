@@ -82,6 +82,17 @@ const fullBeadPalette: PaletteColor[] = Object.entries(mardToHexMapping)
   })
   .filter((color): color is PaletteColor => color !== null);
 
+type ManualEditTool = 'brush' | 'eraser' | 'picker' | 'fill' | 'line' | 'rect';
+
+const manualEditTools: { tool: ManualEditTool; label: string; title: string }[] = [
+  { tool: 'brush', label: '画笔', title: '单格上色，按住拖动可连续绘制' },
+  { tool: 'eraser', label: '橡皮', title: '单格擦除，按住拖动可连续擦除' },
+  { tool: 'picker', label: '取色', title: '从画布中选择颜色' },
+  { tool: 'fill', label: '填充', title: '填充相邻的同色区域' },
+  { tool: 'line', label: '直线', title: '点击起点，再点击终点' },
+  { tool: 'rect', label: '矩形', title: '点击起点，再点击对角点' },
+];
+
 // ++ Add definition for background color keys ++
 
 // 1. 导入新组件
@@ -122,6 +133,7 @@ import {
 import { createShareCode, readShareCode } from '../utils/shareCode';
 
 export default function Home() {
+  const [canvasSource, setCanvasSource] = useState<'image' | 'blank' | 'csv'>('image');
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<number>(50);
   const [granularityInput, setGranularityInput] = useState<string>("50");
@@ -148,6 +160,8 @@ export default function Home() {
   const [tooltipData, setTooltipData] = useState<{ x: number, y: number, key: string, color: string } | null>(null);
   const [remapTrigger, setRemapTrigger] = useState<number>(0);
   const [isManualColoringMode, setIsManualColoringMode] = useState<boolean>(false);
+  const [manualEditTool, setManualEditTool] = useState<ManualEditTool>('brush');
+  const [manualShapeStart, setManualShapeStart] = useState<{ row: number; col: number } | null>(null);
   const [selectedColor, setSelectedColor] = useState<MappedPixel | null>(null);
   // 新增：一键擦除模式状态
   const [isEraseMode, setIsEraseMode] = useState<boolean>(false);
@@ -164,7 +178,10 @@ export default function Home() {
     showCellNumbers: true,
     gridLineColor: gridLineColorOptions[0].value,
     includeStats: true, // 默认包含统计信息
-    exportCsv: false // 默认不导出CSV
+    exportCsv: false, // 默认不导出CSV
+    watermarkEnabled: true,
+    watermarkText: '@拼豆',
+    watermarkStyle: 'tile'
   });
 
   // 新增：高亮相关状态
@@ -642,6 +659,21 @@ export default function Home() {
     return canvas.toDataURL('image/png');
   };
 
+  const getDefaultPaintColor = useCallback((): MappedPixel | null => {
+    const candidate = activeBeadPalette.find(color => color.hex.toUpperCase() !== '#FFFFFF')
+      || activeBeadPalette[0]
+      || fullBeadPalette.find(color => color.hex.toUpperCase() !== '#FFFFFF')
+      || fullBeadPalette[0];
+
+    if (!candidate) return null;
+
+    return {
+      key: getColorKeyByHex(candidate.hex, selectedColorSystem),
+      color: candidate.hex,
+      isExternal: false,
+    };
+  }, [activeBeadPalette, selectedColorSystem]);
+
   const handleCreateBlankCanvas = useCallback(() => {
     const widthInput = window.prompt('请输入空白画布宽度（10-300）', '50');
     if (widthInput === null) return;
@@ -663,6 +695,7 @@ export default function Home() {
     const dimensions = { N, M };
 
     skipNextPixelateRef.current = true;
+    setCanvasSource('blank');
     setOriginalImageSrc(generateSyntheticImageFromPixelData(blankPixelData, dimensions));
     setMappedPixelData(blankPixelData);
     setGridDimensions(dimensions);
@@ -677,12 +710,17 @@ export default function Home() {
     setCurrentProjectName(`空白画布 ${N}x${M}`);
     setCurrentProjectVersion(0);
     setIsManualColoringMode(true);
-    setSelectedColor(null);
+    setManualEditTool('brush');
+    setManualShapeStart(null);
+    setSelectedColor(getDefaultPaintColor());
     setIsEraseMode(false);
+    setShowFullPalette(true);
+    setIsFloatingPaletteOpen(true);
+    setActiveFloatingTool('palette');
     setSaveStatus('dirty');
     setHasUnsavedChanges(true);
     showToast(`已创建空白画布 ${N}x${M}`);
-  }, [similarityThreshold, showToast]);
+  }, [getDefaultPaintColor, similarityThreshold, showToast]);
 
   const generateProjectThumbnail = useCallback((pixelData: MappedPixel[][] | null, dimensions: { N: number; M: number } | null): string | null => {
     if (!pixelData || !dimensions) return null;
@@ -712,6 +750,7 @@ export default function Home() {
   }, []);
 
   const buildProjectState = useCallback((): ProjectState => ({
+    canvasSource,
     originalImageSrc,
     granularity,
     similarityThreshold,
@@ -726,6 +765,7 @@ export default function Home() {
     totalBeadCount,
     downloadOptions,
   }), [
+    canvasSource,
     originalImageSrc,
     granularity,
     similarityThreshold,
@@ -748,10 +788,13 @@ export default function Home() {
   }) => {
     isRestoringProjectRef.current = true;
     skipNextPixelateRef.current = true;
+    const restoredCanvasSource = state.canvasSource || 'image';
+    const shouldOpenAsBlankCanvas = restoredCanvasSource === 'blank';
 
     setCurrentProjectId(options.id);
     setCurrentProjectName(options.name);
     setCurrentProjectVersion(options.version);
+    setCanvasSource(restoredCanvasSource);
     setOriginalImageSrc(state.originalImageSrc);
     setGranularity(state.granularity);
     setGranularityInput(state.granularity.toString());
@@ -766,10 +809,18 @@ export default function Home() {
     setGridDimensions(state.gridDimensions);
     setColorCounts(state.colorCounts);
     setTotalBeadCount(state.totalBeadCount);
-    setDownloadOptions(state.downloadOptions);
-    setIsManualColoringMode(false);
-    setSelectedColor(null);
+    setDownloadOptions({
+      ...downloadOptions,
+      ...state.downloadOptions,
+    });
+    setIsManualColoringMode(shouldOpenAsBlankCanvas);
+    setManualEditTool('brush');
+    setManualShapeStart(null);
+    setSelectedColor(shouldOpenAsBlankCanvas ? getDefaultPaintColor() : null);
     setIsEraseMode(false);
+    setShowFullPalette(shouldOpenAsBlankCanvas);
+    setIsFloatingPaletteOpen(shouldOpenAsBlankCanvas);
+    setActiveFloatingTool(shouldOpenAsBlankCanvas ? 'palette' : null);
     setVersionConflict(null);
     setSaveStatus('saved');
     setHasUnsavedChanges(false);
@@ -778,7 +829,7 @@ export default function Home() {
     window.setTimeout(() => {
       isRestoringProjectRef.current = false;
     }, 0);
-  }, []);
+  }, [downloadOptions, getDefaultPaintColor]);
 
   const applyProject = useCallback((project: ProjectDetail) => {
     restoreProjectState(project.state_json, {
@@ -1082,6 +1133,7 @@ export default function Home() {
           console.log(`成功导入CSV文件: ${gridDimensions.N}x${gridDimensions.M}`);
           
           // 设置导入的数据
+          setCanvasSource('csv');
           setMappedPixelData(mappedPixelData);
           setGridDimensions(gridDimensions);
           setOriginalImageSrc(null); // CSV导入时没有原始图片
@@ -1114,6 +1166,7 @@ export default function Home() {
           // 根据mappedPixelData生成合成的originalImageSrc
           const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
           
+          skipNextPixelateRef.current = true;
           setOriginalImageSrc(syntheticImageSrc);
           
           // 重置状态
@@ -1134,6 +1187,7 @@ export default function Home() {
     } else {
       // 处理图片文件
       const applyImageSrc = (result: string) => {
+        setCanvasSource('image');
         setOriginalImageSrc(result);
         setMappedPixelData(null);
         setGridDimensions(null);
@@ -1206,6 +1260,7 @@ export default function Home() {
     // 如果开启擦除模式，取消选中的颜色
     if (!isEraseMode) {
       setSelectedColor(null);
+      setManualShapeStart(null);
     }
   };
 
@@ -1526,6 +1581,10 @@ export default function Home() {
 
   // 修改useEffect中的pixelateImage调用，加入模式参数
   useEffect(() => {
+    if (canvasSource === 'blank') {
+      return;
+    }
+
     if (skipNextPixelateRef.current) {
       skipNextPixelateRef.current = false;
       return;
@@ -1560,7 +1619,7 @@ export default function Home() {
         // setTotalBeadCount(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger]);
+  }, [canvasSource, originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger]);
 
   // 确保文件输入框引用在组件挂载后正确设置
   useEffect(() => {
@@ -1963,6 +2022,216 @@ export default function Home() {
     }
   };
 
+  const getPaintCellForTool = useCallback((tool: ManualEditTool): MappedPixel | null => {
+    if (tool === 'eraser') {
+      return { ...transparentColorData };
+    }
+
+    if (!selectedColor) {
+      return null;
+    }
+
+    if (selectedColor.key === TRANSPARENT_KEY) {
+      return { ...transparentColorData };
+    }
+
+    return {
+      ...selectedColor,
+      isExternal: false,
+    };
+  }, [selectedColor]);
+
+  const isSameGridCell = (cellA: MappedPixel | undefined, cellB: MappedPixel) => (
+    Boolean(cellA?.isExternal) === Boolean(cellB.isExternal)
+    && cellA?.key === cellB.key
+    && (cellA?.color || '').toUpperCase() === cellB.color.toUpperCase()
+  );
+
+  const paintCells = useCallback((
+    sourceData: MappedPixel[][],
+    cells: { row: number; col: number }[],
+    paintCell: MappedPixel
+  ) => {
+    const nextData = sourceData.map(row => row.map(cell => ({ ...cell })));
+    let changed = false;
+
+    cells.forEach(({ row, col }) => {
+      if (!gridDimensions || row < 0 || col < 0 || row >= gridDimensions.M || col >= gridDimensions.N) {
+        return;
+      }
+
+      if (isSameGridCell(nextData[row]?.[col], paintCell)) {
+        return;
+      }
+
+      nextData[row][col] = { ...paintCell };
+      changed = true;
+    });
+
+    return changed ? nextData : null;
+  }, [gridDimensions]);
+
+  const getLineCells = (start: { row: number; col: number }, end: { row: number; col: number }) => {
+    const cells: { row: number; col: number }[] = [];
+    let x0 = start.col;
+    let y0 = start.row;
+    const x1 = end.col;
+    const y1 = end.row;
+    const dx = Math.abs(x1 - x0);
+    const sx = x0 < x1 ? 1 : -1;
+    const dy = -Math.abs(y1 - y0);
+    const sy = y0 < y1 ? 1 : -1;
+    let error = dx + dy;
+
+    while (true) {
+      cells.push({ row: y0, col: x0 });
+      if (x0 === x1 && y0 === y1) break;
+      const doubledError = 2 * error;
+      if (doubledError >= dy) {
+        error += dy;
+        x0 += sx;
+      }
+      if (doubledError <= dx) {
+        error += dx;
+        y0 += sy;
+      }
+    }
+
+    return cells;
+  };
+
+  const getRectCells = (start: { row: number; col: number }, end: { row: number; col: number }) => {
+    const top = Math.min(start.row, end.row);
+    const bottom = Math.max(start.row, end.row);
+    const left = Math.min(start.col, end.col);
+    const right = Math.max(start.col, end.col);
+    const cells: { row: number; col: number }[] = [];
+
+    for (let col = left; col <= right; col++) {
+      cells.push({ row: top, col });
+      if (bottom !== top) cells.push({ row: bottom, col });
+    }
+    for (let row = top + 1; row < bottom; row++) {
+      cells.push({ row, col: left });
+      if (right !== left) cells.push({ row, col: right });
+    }
+
+    return cells;
+  };
+
+  const handleManualCanvasEdit = useCallback((row: number, col: number) => {
+    if (!mappedPixelData || !gridDimensions) return;
+
+    const currentCell = mappedPixelData[row]?.[col];
+
+    if (manualEditTool === 'picker') {
+      if (currentCell && !currentCell.isExternal && currentCell.key !== TRANSPARENT_KEY) {
+        setSelectedColor({
+          key: getColorKeyByHex(currentCell.color, selectedColorSystem),
+          color: currentCell.color,
+          isExternal: false,
+        });
+        setManualEditTool('brush');
+        showToast('已取色');
+      }
+      setTooltipData(null);
+      return;
+    }
+
+    const paintCell = getPaintCellForTool(manualEditTool);
+    if (!paintCell) {
+      setIsFloatingPaletteOpen(true);
+      setShowFullPalette(true);
+      showToast('请先选择颜色');
+      return;
+    }
+
+    if (manualEditTool === 'fill') {
+      if (!currentCell || isSameGridCell(currentCell, paintCell)) return;
+
+      const targetKey = currentCell.key;
+      const targetColor = currentCell.color.toUpperCase();
+      const targetIsExternal = Boolean(currentCell.isExternal);
+      const visited = Array.from({ length: gridDimensions.M }, () => Array(gridDimensions.N).fill(false));
+      const stack = [{ row, col }];
+      const cells: { row: number; col: number }[] = [];
+
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (
+          current.row < 0
+          || current.col < 0
+          || current.row >= gridDimensions.M
+          || current.col >= gridDimensions.N
+          || visited[current.row][current.col]
+        ) {
+          continue;
+        }
+
+        const candidate = mappedPixelData[current.row]?.[current.col];
+        if (
+          !candidate
+          || candidate.key !== targetKey
+          || candidate.color.toUpperCase() !== targetColor
+          || Boolean(candidate.isExternal) !== targetIsExternal
+        ) {
+          continue;
+        }
+
+        visited[current.row][current.col] = true;
+        cells.push(current);
+        stack.push(
+          { row: current.row - 1, col: current.col },
+          { row: current.row + 1, col: current.col },
+          { row: current.row, col: current.col - 1 },
+          { row: current.row, col: current.col + 1 }
+        );
+      }
+
+      const nextData = paintCells(mappedPixelData, cells, paintCell);
+      if (nextData) {
+        applyGridEdit(nextData);
+      }
+      setTooltipData(null);
+      return;
+    }
+
+    if (manualEditTool === 'line' || manualEditTool === 'rect') {
+      if (!manualShapeStart) {
+        setManualShapeStart({ row, col });
+        showToast(manualEditTool === 'line' ? '已设置直线起点' : '已设置矩形起点');
+        return;
+      }
+
+      const cells = manualEditTool === 'line'
+        ? getLineCells(manualShapeStart, { row, col })
+        : getRectCells(manualShapeStart, { row, col });
+      const nextData = paintCells(mappedPixelData, cells, paintCell);
+      if (nextData) {
+        applyGridEdit(nextData);
+      }
+      setManualShapeStart(null);
+      setTooltipData(null);
+      return;
+    }
+
+    const nextData = paintCells(mappedPixelData, [{ row, col }], paintCell);
+    if (nextData) {
+      applyGridEdit(nextData);
+    }
+    setTooltipData(null);
+  }, [
+    applyGridEdit,
+    getPaintCellForTool,
+    gridDimensions,
+    manualEditTool,
+    manualShapeStart,
+    mappedPixelData,
+    paintCells,
+    selectedColorSystem,
+    showToast,
+  ]);
+
   // ++ Re-introduce the combined interaction handler ++
   const handleCanvasInteraction = (
     clientX: number, 
@@ -1999,6 +2268,11 @@ export default function Home() {
 
     if (i >= 0 && i < N && j >= 0 && j < M) {
       const cellData = mappedPixelData[j][i];
+
+      if (isClick && isManualColoringMode && !colorReplaceState.isActive && !isEraseMode) {
+        handleManualCanvasEdit(j, i);
+        return;
+      }
 
       // 颜色替换模式逻辑 - 选择源颜色
       if (isClick && colorReplaceState.isActive && colorReplaceState.step === 'select-source') {
@@ -2316,6 +2590,8 @@ export default function Home() {
     
     // 设置选中的颜色
     setSelectedColor(colorData);
+    setManualEditTool(colorData.key === TRANSPARENT_KEY ? 'eraser' : 'brush');
+    setManualShapeStart(null);
   };
 
   // 新增：颜色替换相关处理函数
@@ -2557,9 +2833,46 @@ export default function Home() {
     />
 
     {/* Apply dark mode styles to the main container */}
-    <div className="min-h-screen p-4 sm:p-6 flex flex-col items-center bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 font-[family-name:var(--font-geist-sans)] overflow-x-hidden">
+    <div className="modern-workspace min-h-screen flex flex-col overflow-x-hidden font-[family-name:var(--font-geist-sans)]">
+      <header className="sticky top-0 z-40 w-full px-2 pb-1 pt-2 sm:px-4">
+        <div className="modern-glass mx-auto flex h-14 w-full max-w-screen-2xl items-center gap-2 rounded-2xl px-2 sm:gap-3">
+          <button type="button" className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg active:opacity-70" title="回到工作台">
+            <span className="grid grid-cols-2 gap-0.5 rounded-lg bg-white/55 p-1.5 dark:bg-white/10">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-pink-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            </span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">拼豆</p>
+            <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">{currentProjectName}</p>
+          </div>
+          <div className="flex flex-shrink-0 items-center gap-1 sm:gap-1.5">
+            <button type="button" className="flex min-h-[44px] flex-col items-start rounded-xl bg-white/50 px-2.5 py-1 text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10" title={`色板设置 · ${selectedColorSystem} · ${totalBeadCount || 0} 颗`}>
+              <span className="text-[10px] text-gray-600 dark:text-gray-300">{selectedColorSystem || 'MARD'}</span>
+              <span className="text-[11px] font-semibold">{totalBeadCount || 0}</span>
+            </button>
+            <button type="button" onClick={handleOpenProjects} className="hidden min-h-[44px] rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block">
+              我的项目
+            </button>
+            <button type="button" onClick={isMounted ? triggerFileInput : undefined} className="min-h-[44px] rounded-xl bg-white/50 px-4 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10">
+              导入
+            </button>
+            <button type="button" onClick={() => setIsDownloadSettingsOpen(true)} disabled={!mappedPixelData} className="min-h-[44px] rounded-xl bg-white/50 px-4 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10">
+              下载
+            </button>
+            <button type="button" onClick={() => persistProject()} disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'} className="min-h-[44px] rounded-xl bg-[#d97757] px-4 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70">
+              {saveStatus === 'saving' ? '保存中' : '保存'}
+            </button>
+            <button type="button" onClick={() => setIsShareModalOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="hidden min-h-[44px] rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block">
+              分享
+            </button>
+          </div>
+        </div>
+      </header>
       {/* Apply dark mode styles to the header */}
-      <header className="w-full md:max-w-4xl text-center mt-6 mb-8 sm:mt-8 sm:mb-10 relative overflow-hidden">
+      <header className="hidden">
         {/* Adjust decorative background colors for dark mode */}
         <div className="absolute top-0 left-0 w-48 h-48 bg-blue-100 dark:bg-blue-900 rounded-full opacity-30 dark:opacity-20 blur-3xl"></div>
         <div className="absolute bottom-0 right-0 w-48 h-48 bg-pink-100 dark:bg-pink-900 rounded-full opacity-30 dark:opacity-20 blur-3xl"></div>
@@ -2775,8 +3088,9 @@ export default function Home() {
         </div>
       </header>
 
+      <div className="mx-auto grid w-full max-w-screen-2xl flex-1 gap-3 px-2 py-3 sm:px-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       {/* Apply dark mode styles to the main section */}
-      <main ref={mainRef} className="w-full md:max-w-4xl flex flex-col items-center space-y-5 sm:space-y-6 relative overflow-hidden">
+      <main ref={mainRef} className="modern-stage w-full overflow-hidden rounded-2xl px-3 py-4 flex flex-col items-center space-y-5 sm:space-y-6 relative sm:px-5">
         <ProjectToolbar
           projectName={currentProjectName}
           saveStatus={saveStatus}
@@ -3012,6 +3326,56 @@ export default function Home() {
                 </div>
               )}
 
+              {isManualColoringMode && mappedPixelData && gridDimensions && (
+                <div className="mb-4 w-full rounded-xl border border-gray-200 bg-white/90 p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800/90">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap gap-2">
+                      {manualEditTools.map(({ tool, label, title }) => (
+                        <button
+                          key={tool}
+                          type="button"
+                          onClick={() => {
+                            setManualEditTool(tool);
+                            setManualShapeStart(null);
+                            if (tool === 'brush' || tool === 'fill' || tool === 'line' || tool === 'rect') {
+                              setIsEraseMode(false);
+                              setColorReplaceState({ isActive: false, step: 'select-source' });
+                            }
+                          }}
+                          title={title}
+                          className={`min-h-[36px] rounded-lg px-3 text-xs font-medium transition-colors ${
+                            manualEditTool === tool
+                              ? 'bg-[#d97757] text-white shadow-sm'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                      <span>当前</span>
+                      <span
+                        className="h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
+                        style={{ backgroundColor: manualEditTool === 'eraser' ? '#FFFFFF' : selectedColor?.color || '#FFFFFF' }}
+                      />
+                      <span>
+                        {manualEditTool === 'eraser'
+                          ? '橡皮'
+                          : selectedColor
+                            ? getColorKeyByHex(selectedColor.color, selectedColorSystem)
+                            : '未选颜色'}
+                      </span>
+                      {manualShapeStart && (
+                        <span className="rounded bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                          已选起点 {manualShapeStart.col + 1},{manualShapeStart.row + 1}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Canvas Preview Container */}
               {/* Apply dark mode styles */}
               <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
@@ -3035,6 +3399,7 @@ export default function Home() {
                     mappedPixelData={mappedPixelData}
                     gridDimensions={gridDimensions}
                     isManualColoringMode={isManualColoringMode}
+                    continuousManualInput={manualEditTool === 'brush' || manualEditTool === 'eraser'}
                     onInteraction={handleCanvasInteraction}
                     highlightColorKey={highlightColorKey}
                     onHighlightComplete={handleHighlightComplete}
@@ -3205,7 +3570,11 @@ export default function Home() {
              <button
                 onClick={() => {
                   setIsManualColoringMode(true); // Enter mode
-                  setSelectedColor(null);
+                  setManualEditTool('brush');
+                  setManualShapeStart(null);
+                  setSelectedColor(getDefaultPaintColor());
+                  setShowFullPalette(true);
+                  setIsFloatingPaletteOpen(true);
                   setTooltipData(null);
                 }}
                 className={`w-full py-2.5 px-4 text-sm sm:text-base rounded-lg transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg hover:translate-y-[-1px]`}
@@ -3250,6 +3619,59 @@ export default function Home() {
 
       </main>
 
+      <aside className="modern-side-panel hidden rounded-2xl lg:flex">
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
+          <section className="rounded-xl border border-white/50 bg-white/45 p-4 dark:border-white/10 dark:bg-white/5">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">项目</p>
+            <h2 className="mt-1 truncate text-base font-semibold text-gray-800 dark:text-gray-100">{currentProjectName}</h2>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-lg bg-white/60 p-3 dark:bg-white/5">
+                <p className="text-gray-500 dark:text-gray-400">画布</p>
+                <p className="mt-1 font-semibold text-gray-800 dark:text-gray-100">{gridDimensions ? `${gridDimensions.N}x${gridDimensions.M}` : '--'}</p>
+              </div>
+              <div className="rounded-lg bg-white/60 p-3 dark:bg-white/5">
+                <p className="text-gray-500 dark:text-gray-400">豆数</p>
+                <p className="mt-1 font-semibold text-gray-800 dark:text-gray-100">{totalBeadCount || 0}</p>
+              </div>
+              <div className="rounded-lg bg-white/60 p-3 dark:bg-white/5">
+                <p className="text-gray-500 dark:text-gray-400">色板</p>
+                <p className="mt-1 font-semibold text-gray-800 dark:text-gray-100">{selectedColorSystem}</p>
+              </div>
+              <div className="rounded-lg bg-white/60 p-3 dark:bg-white/5">
+                <p className="text-gray-500 dark:text-gray-400">状态</p>
+                <p className="mt-1 font-semibold text-gray-800 dark:text-gray-100">{saveStatus === 'saved' ? '已保存' : saveStatus === 'saving' ? '保存中' : saveStatus === 'dirty' ? '未保存' : saveStatus === 'conflict' ? '有冲突' : '需检查'}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-white/50 bg-white/45 p-4 dark:border-white/10 dark:bg-white/5">
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">快捷操作</h2>
+            <div className="mt-3 grid gap-2">
+              <button type="button" onClick={handleOpenProjects} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
+                打开我的项目
+              </button>
+              <button type="button" onClick={() => setIsImageEditorOpen(true)} disabled={!originalImageSrc} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
+                编辑原图
+              </button>
+              <button type="button" onClick={() => setIsCanvasToolsOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
+                画布工具
+              </button>
+              <button type="button" onClick={() => setIsShareModalOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
+                分享码导入/导出
+              </button>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-emerald-200/70 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+            <h2 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">私有同步</h2>
+            <p className="mt-2 text-xs leading-6 text-emerald-800/80 dark:text-emerald-100/75">
+              当前版本使用服务器 SQLite 保存项目，手机和电脑访问同一地址后，可以打开同一项目继续修改。公开画廊发布功能按要求不接入。
+            </p>
+          </section>
+        </div>
+      </aside>
+      </div>
+
       {/* 悬浮工具栏 */}
       <FloatingToolbar
         isManualColoringMode={isManualColoringMode}
@@ -3257,6 +3679,8 @@ export default function Home() {
         onTogglePalette={() => setIsFloatingPaletteOpen(!isFloatingPaletteOpen)}
         onExitManualMode={() => {
           setIsManualColoringMode(false);
+          setManualEditTool('brush');
+          setManualShapeStart(null);
           setSelectedColor(null);
           setTooltipData(null);
           setIsEraseMode(false);
