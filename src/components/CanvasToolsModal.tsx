@@ -96,7 +96,7 @@ export default function CanvasToolsModal({
 
         <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
           <h4 className="text-sm font-semibold text-gray-900 dark:text-white">选区</h4>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">当前版本先通过坐标操作选区，后续会升级为鼠标框选。</p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">可以在画布上用框选工具拖拽选择，也可以在这里输入精确坐标。</p>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {([
               ['startRow', '起始行'],

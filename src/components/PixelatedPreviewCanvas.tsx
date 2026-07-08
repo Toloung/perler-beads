@@ -2,10 +2,12 @@
 
 import React, { useRef, useEffect, TouchEvent, MouseEvent, useState } from 'react';
 import { MappedPixel } from '../utils/pixelation';
+import { GridSelection } from '../utils/gridEditing';
 
 interface PixelatedPreviewCanvasProps {
   mappedPixelData: MappedPixel[][] | null;
   gridDimensions: { N: number; M: number } | null;
+  activeSelection?: GridSelection | null;
   isManualColoringMode: boolean;
   continuousManualInput?: boolean;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -17,6 +19,7 @@ interface PixelatedPreviewCanvasProps {
     isClick: boolean,
     isTouchEnd?: boolean
   ) => void;
+  onManualPointerCell?: (phase: 'down' | 'move' | 'up', row: number, col: number) => void;
   highlightColorKey?: string | null;
   onHighlightComplete?: () => void;
 }
@@ -27,7 +30,8 @@ const drawPixelatedCanvas = (
   canvas: HTMLCanvasElement | null,
   dims: { N: number; M: number } | null,
   highlightColorKey?: string | null,
-  isHighlighting?: boolean
+  isHighlighting?: boolean,
+  activeSelection?: GridSelection | null
 ) => {
   if (!canvas || !dims || !dataToDraw) {
     console.warn("drawPixelatedCanvas: Missing required parameters");
@@ -95,15 +99,36 @@ const drawPixelatedCanvas = (
       pixelatedCtx.strokeRect(drawX + 0.5, drawY + 0.5, cellWidthOutput, cellHeightOutput);
     }
   }
+
+  if (activeSelection) {
+    const startRow = Math.max(0, Math.min(M - 1, Math.min(activeSelection.startRow, activeSelection.endRow)));
+    const endRow = Math.max(0, Math.min(M - 1, Math.max(activeSelection.startRow, activeSelection.endRow)));
+    const startCol = Math.max(0, Math.min(N - 1, Math.min(activeSelection.startCol, activeSelection.endCol)));
+    const endCol = Math.max(0, Math.min(N - 1, Math.max(activeSelection.startCol, activeSelection.endCol)));
+    const x = startCol * cellWidthOutput;
+    const y = startRow * cellHeightOutput;
+    const width = (endCol - startCol + 1) * cellWidthOutput;
+    const height = (endRow - startRow + 1) * cellHeightOutput;
+
+    pixelatedCtx.fillStyle = 'rgba(59, 130, 246, 0.18)';
+    pixelatedCtx.fillRect(x, y, width, height);
+    pixelatedCtx.strokeStyle = '#2563EB';
+    pixelatedCtx.lineWidth = Math.max(2, Math.min(cellWidthOutput, cellHeightOutput) * 0.08);
+    pixelatedCtx.setLineDash([Math.max(4, cellWidthOutput * 0.25), Math.max(3, cellWidthOutput * 0.18)]);
+    pixelatedCtx.strokeRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+    pixelatedCtx.setLineDash([]);
+  }
 };
 
 const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   mappedPixelData,
   gridDimensions,
+  activeSelection,
   isManualColoringMode,
   continuousManualInput = false,
   canvasRef,
   onInteraction,
+  onManualPointerCell,
   highlightColorKey,
   onHighlightComplete,
 }) => {
@@ -111,6 +136,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const touchStartPosRef = useRef<{ x: number; y: number; pageX: number; pageY: number } | null>(null);
   const touchMovedRef = useRef<boolean>(false);
   const isMousePaintingRef = useRef(false);
+  const lastManualCellRef = useRef<{ row: number; col: number } | null>(null);
   const [isHighlighting, setIsHighlighting] = useState(false);
 
   // Effect to detect dark mode changes and update state
@@ -142,9 +168,23 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     // Ensure darkModeState is not null before drawing
     if (mappedPixelData && gridDimensions && canvasRef.current && darkModeState !== null) {
       console.log(`Redrawing canvas, dark mode: ${darkModeState}`); // Log redraw trigger
-      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting);
+      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting, activeSelection);
     }
-  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting]); // Add darkModeState dependency
+  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting, activeSelection]); // Add darkModeState dependency
+
+  const getCellFromPointer = (clientX: number, clientY: number) => {
+    if (!canvasRef.current || !gridDimensions) return null;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    const canvasX = (clientX - rect.left) * scaleX;
+    const canvasY = (clientY - rect.top) * scaleY;
+    const col = Math.floor(canvasX / (canvasRef.current.width / gridDimensions.N));
+    const row = Math.floor(canvasY / (canvasRef.current.height / gridDimensions.M));
+
+    if (row < 0 || col < 0 || row >= gridDimensions.M || col >= gridDimensions.N) return null;
+    return { row, col };
+  };
 
   // 处理高亮效果
   useEffect(() => {
@@ -164,6 +204,14 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   
   // 鼠标移动时显示提示
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (isManualColoringMode && isMousePaintingRef.current && onManualPointerCell) {
+      const cell = getCellFromPointer(event.clientX, event.clientY);
+      if (cell) {
+        lastManualCellRef.current = cell;
+        onManualPointerCell('move', cell.row, cell.col);
+      }
+    }
+
     if (isManualColoringMode && continuousManualInput && isMousePaintingRef.current) {
       onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, true);
       return;
@@ -183,13 +231,30 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   };
 
   const handleMouseDown = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (isManualColoringMode && onManualPointerCell) {
+      const cell = getCellFromPointer(event.clientX, event.clientY);
+      if (cell) {
+        lastManualCellRef.current = cell;
+        onManualPointerCell('down', cell.row, cell.col);
+      }
+    }
+
     if (isManualColoringMode && continuousManualInput) {
       isMousePaintingRef.current = true;
       onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, true);
+    } else if (isManualColoringMode && onManualPointerCell) {
+      isMousePaintingRef.current = true;
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (isManualColoringMode && isMousePaintingRef.current && onManualPointerCell) {
+      const cell = getCellFromPointer(event.clientX, event.clientY);
+      if (cell) {
+        lastManualCellRef.current = cell;
+        onManualPointerCell('up', cell.row, cell.col);
+      }
+    }
     isMousePaintingRef.current = false;
   };
 
@@ -216,6 +281,14 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     };
     touchMovedRef.current = false;
 
+    if (isManualColoringMode && onManualPointerCell) {
+      const cell = getCellFromPointer(touch.clientX, touch.clientY);
+      if (cell) {
+        lastManualCellRef.current = cell;
+        onManualPointerCell('down', cell.row, cell.col);
+      }
+    }
+
     // 在非手动模式下，触摸开始时仍然可以立即显示/切换tooltip，提供即时反馈
     if (!isManualColoringMode) {
         onInteraction(touch.clientX, touch.clientY, touch.pageX, touch.pageY, false);
@@ -231,7 +304,25 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     if (isManualColoringMode && continuousManualInput) {
       event.preventDefault();
       touchMovedRef.current = true;
+      if (onManualPointerCell) {
+        const cell = getCellFromPointer(touch.clientX, touch.clientY);
+        if (cell) {
+          lastManualCellRef.current = cell;
+          onManualPointerCell('move', cell.row, cell.col);
+        }
+      }
       onInteraction(touch.clientX, touch.clientY, touch.pageX, touch.pageY, true);
+      return;
+    }
+
+    if (isManualColoringMode && onManualPointerCell) {
+      event.preventDefault();
+      touchMovedRef.current = true;
+      const cell = getCellFromPointer(touch.clientX, touch.clientY);
+      if (cell) {
+        lastManualCellRef.current = cell;
+        onManualPointerCell('move', cell.row, cell.col);
+      }
       return;
     }
     
@@ -249,6 +340,11 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   
   // 触摸结束时不再自动隐藏提示框
   const handleTouchEnd = () => {
+    if (isManualColoringMode && onManualPointerCell && touchStartPosRef.current) {
+      const cell = lastManualCellRef.current || getCellFromPointer(touchStartPosRef.current.x, touchStartPosRef.current.y);
+      if (cell) onManualPointerCell('up', cell.row, cell.col);
+    }
+
     // 检查是否是手动模式，并且触摸没有移动（判定为点击）
     if (isManualColoringMode && !touchMovedRef.current && touchStartPosRef.current) {
       // 使用触摸开始时的坐标来执行上色操作
@@ -260,6 +356,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
     // 重置触摸状态
     touchStartPosRef.current = null;
+    lastManualCellRef.current = null;
     touchMovedRef.current = false;
   };
 

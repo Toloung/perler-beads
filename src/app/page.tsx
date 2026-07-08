@@ -82,7 +82,7 @@ const fullBeadPalette: PaletteColor[] = Object.entries(mardToHexMapping)
   })
   .filter((color): color is PaletteColor => color !== null);
 
-type ManualEditTool = 'brush' | 'eraser' | 'picker' | 'fill' | 'line' | 'rect';
+type ManualEditTool = 'brush' | 'eraser' | 'picker' | 'fill' | 'line' | 'rect' | 'select' | 'move' | 'paste';
 
 const manualEditTools: { tool: ManualEditTool; label: string; title: string }[] = [
   { tool: 'brush', label: '画笔', title: '单格上色，按住拖动可连续绘制' },
@@ -91,6 +91,9 @@ const manualEditTools: { tool: ManualEditTool; label: string; title: string }[] 
   { tool: 'fill', label: '填充', title: '填充相邻的同色区域' },
   { tool: 'line', label: '直线', title: '点击起点，再点击终点' },
   { tool: 'rect', label: '矩形', title: '点击起点，再点击对角点' },
+  { tool: 'select', label: '框选', title: '按住拖动画出选区' },
+  { tool: 'move', label: '移动', title: '按住已有选区并拖动到新位置' },
+  { tool: 'paste', label: '粘贴', title: '点击画布把剪贴板内容粘贴到目标位置' },
 ];
 
 // ++ Add definition for background color keys ++
@@ -257,6 +260,14 @@ export default function Home() {
   const [isImageEditorOpen, setIsImageEditorOpen] = useState<boolean>(false);
   const [isCanvasToolsOpen, setIsCanvasToolsOpen] = useState<boolean>(false);
   const [selectionClipboard, setSelectionClipboard] = useState<ClipboardGrid | null>(null);
+  const [activeSelection, setActiveSelection] = useState<GridSelection | null>(null);
+  const [selectionDragStart, setSelectionDragStart] = useState<{ row: number; col: number } | null>(null);
+  const [selectionMoveState, setSelectionMoveState] = useState<{
+    origin: { row: number; col: number };
+    selection: GridSelection;
+    clipboard: ClipboardGrid;
+    baseData: MappedPixel[][];
+  } | null>(null);
   const isRestoringProjectRef = useRef(false);
   const skipNextPixelateRef = useRef(false);
   const lastSavedSnapshotRef = useRef<string>('');
@@ -709,6 +720,10 @@ export default function Home() {
     setCurrentProjectId(null);
     setCurrentProjectName(`空白画布 ${N}x${M}`);
     setCurrentProjectVersion(0);
+    setActiveSelection(null);
+    setSelectionDragStart(null);
+    setSelectionMoveState(null);
+    setSelectionClipboard(null);
     setIsManualColoringMode(true);
     setManualEditTool('brush');
     setManualShapeStart(null);
@@ -809,6 +824,10 @@ export default function Home() {
     setGridDimensions(state.gridDimensions);
     setColorCounts(state.colorCounts);
     setTotalBeadCount(state.totalBeadCount);
+    setActiveSelection(null);
+    setSelectionDragStart(null);
+    setSelectionMoveState(null);
+    setSelectionClipboard(null);
     setDownloadOptions({
       ...downloadOptions,
       ...state.downloadOptions,
@@ -1056,6 +1075,7 @@ export default function Home() {
     if (!mappedPixelData || !gridDimensions) return;
     const normalized = normalizeSelection(selection, gridDimensions);
     setSelectionClipboard(copySelection(mappedPixelData, normalized));
+    setActiveSelection(normalized);
     showToast('选区已复制');
   }, [mappedPixelData, gridDimensions, showToast]);
 
@@ -1064,20 +1084,86 @@ export default function Home() {
     const normalized = normalizeSelection(selection, gridDimensions);
     setSelectionClipboard(copySelection(mappedPixelData, normalized));
     applyGridEdit(clearSelection(mappedPixelData, normalized));
+    setActiveSelection(null);
     showToast('选区已剪切');
   }, [mappedPixelData, gridDimensions, applyGridEdit, showToast]);
 
   const handleDeleteSelection = useCallback((selection: GridSelection) => {
     if (!mappedPixelData || !gridDimensions) return;
     applyGridEdit(clearSelection(mappedPixelData, normalizeSelection(selection, gridDimensions)));
+    setActiveSelection(null);
     showToast('选区已删除');
   }, [mappedPixelData, gridDimensions, applyGridEdit, showToast]);
 
   const handlePasteSelection = useCallback((row: number, col: number) => {
     if (!mappedPixelData || !gridDimensions || !selectionClipboard) return;
     applyGridEdit(pasteClipboard(mappedPixelData, gridDimensions, selectionClipboard, row, col));
+    setActiveSelection({
+      startRow: row,
+      startCol: col,
+      endRow: Math.min(gridDimensions.M - 1, row + selectionClipboard.length - 1),
+      endCol: Math.min(gridDimensions.N - 1, col + (selectionClipboard[0]?.length || 1) - 1),
+    });
     showToast('选区已粘贴');
   }, [mappedPixelData, gridDimensions, selectionClipboard, applyGridEdit, showToast]);
+
+  const getNormalizedActiveSelection = useCallback(() => {
+    if (!activeSelection || !gridDimensions) return null;
+    return normalizeSelection(activeSelection, gridDimensions);
+  }, [activeSelection, gridDimensions]);
+
+  const selectionContainsCell = (selection: GridSelection, row: number, col: number) => (
+    row >= selection.startRow
+    && row <= selection.endRow
+    && col >= selection.startCol
+    && col <= selection.endCol
+  );
+
+  const offsetSelection = useCallback((selection: GridSelection, rowOffset: number, colOffset: number): GridSelection => {
+    if (!gridDimensions) return selection;
+    const height = selection.endRow - selection.startRow;
+    const width = selection.endCol - selection.startCol;
+    const startRow = Math.min(gridDimensions.M - height - 1, Math.max(0, selection.startRow + rowOffset));
+    const startCol = Math.min(gridDimensions.N - width - 1, Math.max(0, selection.startCol + colOffset));
+
+    return {
+      startRow,
+      startCol,
+      endRow: startRow + height,
+      endCol: startCol + width,
+    };
+  }, [gridDimensions]);
+
+  const handleCopyActiveSelection = useCallback(() => {
+    const selection = getNormalizedActiveSelection();
+    if (!selection || !mappedPixelData) return;
+    setSelectionClipboard(copySelection(mappedPixelData, selection));
+    showToast('选区已复制');
+  }, [getNormalizedActiveSelection, mappedPixelData, showToast]);
+
+  const handleCutActiveSelection = useCallback(() => {
+    const selection = getNormalizedActiveSelection();
+    if (!selection || !mappedPixelData) return;
+    setSelectionClipboard(copySelection(mappedPixelData, selection));
+    applyGridEdit(clearSelection(mappedPixelData, selection));
+    setActiveSelection(null);
+    showToast('选区已剪切');
+  }, [applyGridEdit, getNormalizedActiveSelection, mappedPixelData, showToast]);
+
+  const handleDeleteActiveSelection = useCallback(() => {
+    const selection = getNormalizedActiveSelection();
+    if (!selection || !mappedPixelData) return;
+    applyGridEdit(clearSelection(mappedPixelData, selection));
+    setActiveSelection(null);
+    showToast('选区已删除');
+  }, [applyGridEdit, getNormalizedActiveSelection, mappedPixelData, showToast]);
+
+  const handlePasteAtSelection = useCallback(() => {
+    const selection = getNormalizedActiveSelection();
+    if (!selection || !mappedPixelData || !gridDimensions || !selectionClipboard) return;
+    applyGridEdit(pasteClipboard(mappedPixelData, gridDimensions, selectionClipboard, selection.startRow, selection.startCol));
+    showToast('已粘贴到选区起点');
+  }, [applyGridEdit, getNormalizedActiveSelection, gridDimensions, mappedPixelData, selectionClipboard, showToast]);
 
   useEffect(() => {
     if (!isMounted || isRestoringProjectRef.current || !mappedPixelData || !gridDimensions) {
@@ -1162,6 +1248,10 @@ export default function Home() {
           setColorCounts(colorCountsMap);
           setTotalBeadCount(totalCount);
           setInitialGridColorKeys(new Set(Object.keys(colorCountsMap)));
+          setActiveSelection(null);
+          setSelectionDragStart(null);
+          setSelectionMoveState(null);
+          setSelectionClipboard(null);
           
           // 根据mappedPixelData生成合成的originalImageSrc
           const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
@@ -1194,6 +1284,10 @@ export default function Home() {
         setColorCounts(null);
         setTotalBeadCount(0);
         setInitialGridColorKeys(new Set()); // ++ 重置初始键 ++
+        setActiveSelection(null);
+        setSelectionDragStart(null);
+        setSelectionMoveState(null);
+        setSelectionClipboard(null);
         // ++ 重置横轴格子数量为默认值 ++
         const defaultGranularity = 100;
         setGranularity(defaultGranularity);
@@ -1569,6 +1663,9 @@ export default function Home() {
     console.log("Setting image source...");
     img.src = imageSrc;
     setIsManualColoringMode(false);
+    setActiveSelection(null);
+    setSelectionDragStart(null);
+    setSelectionMoveState(null);
     setSelectedColor(null);
   }; // 正确闭合 pixelateImage 函数
 
@@ -2122,6 +2219,10 @@ export default function Home() {
   const handleManualCanvasEdit = useCallback((row: number, col: number) => {
     if (!mappedPixelData || !gridDimensions) return;
 
+    if (manualEditTool === 'select' || manualEditTool === 'move' || manualEditTool === 'paste') {
+      return;
+    }
+
     const currentCell = mappedPixelData[row]?.[col];
 
     if (manualEditTool === 'picker') {
@@ -2229,6 +2330,110 @@ export default function Home() {
     mappedPixelData,
     paintCells,
     selectedColorSystem,
+    showToast,
+  ]);
+
+  const handleManualPointerCell = useCallback((
+    phase: 'down' | 'move' | 'up',
+    row: number,
+    col: number
+  ) => {
+    if (!isManualColoringMode || !mappedPixelData || !gridDimensions) return;
+
+    if (manualEditTool === 'select') {
+      if (phase === 'down') {
+        const start = { row, col };
+        setSelectionDragStart(start);
+        setActiveSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+        setManualShapeStart(null);
+        return;
+      }
+
+      if (selectionDragStart) {
+        const nextSelection = {
+          startRow: selectionDragStart.row,
+          startCol: selectionDragStart.col,
+          endRow: row,
+          endCol: col,
+        };
+        setActiveSelection(nextSelection);
+        if (phase === 'up') {
+          setActiveSelection(normalizeSelection(nextSelection, gridDimensions));
+          setSelectionDragStart(null);
+          showToast('已框选区域');
+        }
+      }
+      return;
+    }
+
+    if (manualEditTool === 'move') {
+      const selection = getNormalizedActiveSelection();
+      if (!selection) {
+        if (phase === 'down') showToast('请先框选区域');
+        return;
+      }
+
+      if (phase === 'down') {
+        if (!selectionContainsCell(selection, row, col)) {
+          showToast('请从选区内拖动');
+          return;
+        }
+
+        setSelectionMoveState({
+          origin: { row, col },
+          selection,
+          clipboard: copySelection(mappedPixelData, selection),
+          baseData: clearSelection(mappedPixelData, selection),
+        });
+        return;
+      }
+
+      if (selectionMoveState) {
+        const rowOffset = row - selectionMoveState.origin.row;
+        const colOffset = col - selectionMoveState.origin.col;
+        const movedSelection = offsetSelection(selectionMoveState.selection, rowOffset, colOffset);
+        setActiveSelection(movedSelection);
+
+        if (phase === 'up') {
+          applyGridEdit(pasteClipboard(
+            selectionMoveState.baseData,
+            gridDimensions,
+            selectionMoveState.clipboard,
+            movedSelection.startRow,
+            movedSelection.startCol
+          ));
+          setSelectionMoveState(null);
+          showToast('选区已移动');
+        }
+      }
+      return;
+    }
+
+    if (manualEditTool === 'paste' && phase === 'down') {
+      if (!selectionClipboard) {
+        showToast('剪贴板为空');
+        return;
+      }
+      applyGridEdit(pasteClipboard(mappedPixelData, gridDimensions, selectionClipboard, row, col));
+      setActiveSelection({
+        startRow: row,
+        startCol: col,
+        endRow: Math.min(gridDimensions.M - 1, row + selectionClipboard.length - 1),
+        endCol: Math.min(gridDimensions.N - 1, col + (selectionClipboard[0]?.length || 1) - 1),
+      });
+      showToast('选区已粘贴');
+    }
+  }, [
+    applyGridEdit,
+    getNormalizedActiveSelection,
+    gridDimensions,
+    isManualColoringMode,
+    manualEditTool,
+    mappedPixelData,
+    offsetSelection,
+    selectionClipboard,
+    selectionDragStart,
+    selectionMoveState,
     showToast,
   ]);
 
@@ -3337,7 +3542,7 @@ export default function Home() {
                           onClick={() => {
                             setManualEditTool(tool);
                             setManualShapeStart(null);
-                            if (tool === 'brush' || tool === 'fill' || tool === 'line' || tool === 'rect') {
+                            if (tool === 'brush' || tool === 'fill' || tool === 'line' || tool === 'rect' || tool === 'select' || tool === 'move' || tool === 'paste') {
                               setIsEraseMode(false);
                               setColorReplaceState({ isActive: false, step: 'select-source' });
                             }
@@ -3371,7 +3576,29 @@ export default function Home() {
                           已选起点 {manualShapeStart.col + 1},{manualShapeStart.row + 1}
                         </span>
                       )}
+                      {activeSelection && (
+                        <span className="rounded bg-blue-100 px-2 py-1 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
+                          选区 {Math.abs(activeSelection.endCol - activeSelection.startCol) + 1}x{Math.abs(activeSelection.endRow - activeSelection.startRow) + 1}
+                        </span>
+                      )}
                     </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-200 pt-3 dark:border-gray-700">
+                    <button type="button" disabled={!activeSelection} onClick={handleCopyActiveSelection} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
+                      复制
+                    </button>
+                    <button type="button" disabled={!activeSelection} onClick={handleCutActiveSelection} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
+                      剪切
+                    </button>
+                    <button type="button" disabled={!selectionClipboard || !activeSelection} onClick={handlePasteAtSelection} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
+                      粘贴到选区
+                    </button>
+                    <button type="button" disabled={!activeSelection} onClick={handleDeleteActiveSelection} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 disabled:opacity-40 dark:border-red-800 dark:text-red-300">
+                      删除
+                    </button>
+                    <button type="button" disabled={!activeSelection} onClick={() => setActiveSelection(null)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
+                      取消选区
+                    </button>
                   </div>
                 </div>
               )}
@@ -3398,9 +3625,11 @@ export default function Home() {
                     canvasRef={pixelatedCanvasRef}
                     mappedPixelData={mappedPixelData}
                     gridDimensions={gridDimensions}
+                    activeSelection={activeSelection}
                     isManualColoringMode={isManualColoringMode}
                     continuousManualInput={manualEditTool === 'brush' || manualEditTool === 'eraser'}
                     onInteraction={handleCanvasInteraction}
+                    onManualPointerCell={handleManualPointerCell}
                     highlightColorKey={highlightColorKey}
                     onHighlightComplete={handleHighlightComplete}
                   />
@@ -3681,6 +3910,9 @@ export default function Home() {
           setIsManualColoringMode(false);
           setManualEditTool('brush');
           setManualShapeStart(null);
+          setActiveSelection(null);
+          setSelectionDragStart(null);
+          setSelectionMoveState(null);
           setSelectedColor(null);
           setTooltipData(null);
           setIsEraseMode(false);
