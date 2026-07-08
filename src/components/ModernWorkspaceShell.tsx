@@ -84,7 +84,7 @@ export default function ModernWorkspaceShell({
   return (
     <div className="modern-workspace w-full">
       <header className="sticky top-0 z-40 w-full px-2 pb-1 pt-2 sm:px-4">
-        <div className="modern-glass mx-auto flex h-14 w-full max-w-screen-2xl items-center gap-2 rounded-2xl px-2 sm:gap-3">
+        <div className="modern-glass mx-auto flex min-h-14 w-full max-w-screen-2xl flex-wrap items-center gap-2 rounded-2xl px-2 py-1.5 sm:gap-3">
           <button type="button" className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg active:opacity-70" title="回到首页">
             <span className="grid grid-cols-2 gap-0.5 rounded-lg bg-white/55 p-1.5 dark:bg-white/10">
               <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
@@ -94,36 +94,36 @@ export default function ModernWorkspaceShell({
             </span>
           </button>
 
-          <div className="min-w-0 flex-1" />
+          <div className="min-w-[2rem] flex-1" />
 
-          <div className="flex flex-shrink-0 items-center gap-1 sm:gap-1.5">
-            <button type="button" className="flex min-h-[44px] flex-col items-start rounded-xl bg-white/50 px-2.5 py-1 text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10" title={`色板设置 · ${selectedColorSystem} · ${colorCount} 色`}>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 sm:gap-1.5">
+            <button type="button" className="flex min-h-10 flex-col items-start rounded-xl bg-white/50 px-2 py-1 text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-2.5" title={`色板设置 · ${selectedColorSystem} · ${colorCount} 色`}>
               <span className="text-[10px] text-gray-600 dark:text-gray-300">{selectedColorSystem}</span>
               <span className="text-[11px] font-semibold">{colorCount}</span>
             </button>
-            <button type="button" onClick={onOpenProjects} className="min-h-[44px] rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10">
+            <button type="button" onClick={onOpenProjects} className="min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-3">
               我的项目
             </button>
-            <button type="button" onClick={onUpload} className="min-h-[44px] rounded-xl bg-white/50 px-4 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10">
+            <button type="button" onClick={onUpload} className="min-h-10 rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-4">
               导入
             </button>
-            <button type="button" onClick={onDownload} disabled={!hasCanvas} className="min-h-[44px] rounded-xl bg-white/50 px-4 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10">
+            <button type="button" onClick={onDownload} disabled={!hasCanvas} className="min-h-10 rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-4">
               下载
             </button>
-            <button type="button" onClick={onSave} disabled={!hasCanvas || saveStatus === 'saving'} className="min-h-[44px] rounded-xl bg-[#d97757] px-4 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70">
+            <button type="button" onClick={onSave} disabled={!hasCanvas || saveStatus === 'saving'} className="min-h-10 rounded-xl bg-[#d97757] px-3 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70 sm:min-h-[44px] sm:px-4">
               {saveStatus === 'saving' ? '保存中' : '保存'}
             </button>
-            <button type="button" onClick={onShare} disabled={!hasCanvas} className="hidden min-h-[44px] rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block">
+            <button type="button" onClick={onShare} disabled={!hasCanvas} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
               分享
             </button>
-            <button type="button" onClick={onSaveAs} disabled={!hasCanvas} className="hidden min-h-[44px] rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block">
+            <button type="button" onClick={onSaveAs} disabled={!hasCanvas} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
               另存
             </button>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto grid w-full max-w-screen-2xl gap-3 px-2 py-3 sm:px-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="mx-auto grid w-full max-w-screen-2xl gap-3 px-2 py-3 sm:px-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="modern-stage min-h-[360px] overflow-hidden rounded-2xl">
           {!hasCanvas && (
             <div className="flex min-h-[360px] flex-col items-center justify-center p-4 sm:p-8">
@@ -161,7 +161,7 @@ export default function ModernWorkspaceShell({
           )}
         </div>
 
-        <aside className="modern-side-panel hidden rounded-2xl lg:flex">
+        <aside className="modern-side-panel hidden rounded-2xl xl:flex">
           <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
             <section className="rounded-xl border border-white/50 bg-white/40 dark:border-white/10 dark:bg-white/5">
               <div className="px-4 py-3">

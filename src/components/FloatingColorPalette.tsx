@@ -60,6 +60,20 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const paletteRef = useRef<HTMLDivElement>(null);
 
+  const clampPosition = useCallback((x: number, y: number) => {
+    if (typeof window === 'undefined') return { x, y };
+    const rect = paletteRef.current?.getBoundingClientRect();
+    const width = rect?.width || Math.min(280, window.innerWidth - 16);
+    const height = rect?.height || Math.min(400, window.innerHeight - 24);
+    const maxX = Math.max(8, window.innerWidth - width - 8);
+    const maxY = Math.max(8, window.innerHeight - height - 8);
+
+    return {
+      x: Math.min(maxX, Math.max(8, x)),
+      y: Math.min(maxY, Math.max(8, y)),
+    };
+  }, []);
+
   // 处理拖拽开始
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!paletteRef.current) return;
@@ -94,11 +108,8 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
     const handleMove = (clientX: number, clientY: number) => {
       if (!isDragging) return;
 
-      // 移除边界限制，允许自由拖动到任何位置
-      const newX = clientX - dragOffset.x;
-      const newY = clientY - dragOffset.y;
-
-      setPosition({ x: newX, y: newY });
+      const nextPosition = clampPosition(clientX - dragOffset.x, clientY - dragOffset.y);
+      setPosition(nextPosition);
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -139,7 +150,16 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
         document.body.style.overflow = '';
       };
     }
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragOffset, clampPosition]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition(prev => clampPosition(prev.x, prev.y));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [clampPosition]);
 
   // 移除窗口大小变化时的边界调整，允许调色盘保持在任何位置
 
@@ -179,8 +199,8 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
       style={{
         left: position.x,
         top: position.y,
-        width: '280px',
-        maxHeight: '400px'
+        width: 'min(280px, calc(100vw - 16px))',
+        maxHeight: 'min(400px, calc(100vh - 24px))'
       }}
       onClick={onActivate}
     >
@@ -218,7 +238,7 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
       </div>
 
       {/* 内容区域 */}
-      <div className="p-3 max-h-80 overflow-y-auto">
+      <div className="max-h-[min(20rem,calc(100vh-7rem))] overflow-y-auto p-3">
           {/* 模式状态指示器 */}
           {colorReplaceState.isActive && (
             <div className="mb-3 p-2 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg text-xs">
@@ -356,4 +376,4 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
   );
 };
 
-export default FloatingColorPalette; 
+export default FloatingColorPalette;

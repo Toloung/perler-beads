@@ -31,7 +31,8 @@ const drawPixelatedCanvas = (
   dims: { N: number; M: number } | null,
   highlightColorKey?: string | null,
   isHighlighting?: boolean,
-  activeSelection?: GridSelection | null
+  activeSelection?: GridSelection | null,
+  hoverCell?: { row: number; col: number } | null
 ) => {
   if (!canvas || !dims || !dataToDraw) {
     console.warn("drawPixelatedCanvas: Missing required parameters");
@@ -118,6 +119,19 @@ const drawPixelatedCanvas = (
     pixelatedCtx.strokeRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
     pixelatedCtx.setLineDash([]);
   }
+
+  if (hoverCell) {
+    const { row, col } = hoverCell;
+    if (row >= 0 && row < M && col >= 0 && col < N) {
+      const x = col * cellWidthOutput;
+      const y = row * cellHeightOutput;
+      pixelatedCtx.fillStyle = 'rgba(217, 119, 87, 0.16)';
+      pixelatedCtx.fillRect(x, y, cellWidthOutput, cellHeightOutput);
+      pixelatedCtx.strokeStyle = '#D97757';
+      pixelatedCtx.lineWidth = Math.max(2, Math.min(cellWidthOutput, cellHeightOutput) * 0.12);
+      pixelatedCtx.strokeRect(x + 1, y + 1, Math.max(0, cellWidthOutput - 2), Math.max(0, cellHeightOutput - 2));
+    }
+  }
 };
 
 const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
@@ -138,6 +152,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const isMousePaintingRef = useRef(false);
   const lastManualCellRef = useRef<{ row: number; col: number } | null>(null);
   const [isHighlighting, setIsHighlighting] = useState(false);
+  const [hoverCell, setHoverCell] = useState<{ row: number; col: number } | null>(null);
 
   // Effect to detect dark mode changes and update state
   useEffect(() => {
@@ -168,9 +183,9 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     // Ensure darkModeState is not null before drawing
     if (mappedPixelData && gridDimensions && canvasRef.current && darkModeState !== null) {
       console.log(`Redrawing canvas, dark mode: ${darkModeState}`); // Log redraw trigger
-      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting, activeSelection);
+      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting, activeSelection, isManualColoringMode ? hoverCell : null);
     }
-  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting, activeSelection]); // Add darkModeState dependency
+  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting, activeSelection, hoverCell, isManualColoringMode]); // Add darkModeState dependency
 
   const getCellFromPointer = (clientX: number, clientY: number) => {
     if (!canvasRef.current || !gridDimensions) return null;
@@ -204,6 +219,10 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   
   // 鼠标移动时显示提示
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (isManualColoringMode) {
+      setHoverCell(getCellFromPointer(event.clientX, event.clientY));
+    }
+
     if (isManualColoringMode && isMousePaintingRef.current && onManualPointerCell) {
       const cell = getCellFromPointer(event.clientX, event.clientY);
       if (cell) {
@@ -226,6 +245,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   // 鼠标离开时隐藏提示
   const handleMouseLeave = () => {
     isMousePaintingRef.current = false;
+    setHoverCell(null);
     // 鼠标离开时总是隐藏tooltip
     onInteraction(0, 0, 0, 0, false, true);
   };
@@ -373,7 +393,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd} // 添加 onTouchCancel 以处理触摸中断的情况
       className={`border border-gray-300 dark:border-gray-600 max-w-full h-auto rounded block ${
-        isManualColoringMode ? 'cursor-pointer' : 'cursor-grab' // 改为 grab 光标提示可以拖动
+        isManualColoringMode ? 'cursor-crosshair' : 'cursor-grab' // 改为 grab 光标提示可以拖动
       }`}
       style={{
         imageRendering: 'pixelated',

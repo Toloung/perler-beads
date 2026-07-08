@@ -3040,7 +3040,7 @@ export default function Home() {
     {/* Apply dark mode styles to the main container */}
     <div className="modern-workspace min-h-screen flex flex-col overflow-x-hidden font-[family-name:var(--font-geist-sans)]">
       <header className="sticky top-0 z-40 w-full px-2 pb-1 pt-2 sm:px-4">
-        <div className="modern-glass mx-auto flex h-14 w-full max-w-screen-2xl items-center gap-2 rounded-2xl px-2 sm:gap-3">
+        <div className="modern-glass mx-auto flex min-h-14 w-full max-w-screen-2xl flex-wrap items-center gap-2 rounded-2xl px-2 py-1.5 sm:gap-3">
           <button type="button" className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg active:opacity-70" title="回到工作台">
             <span className="grid grid-cols-2 gap-0.5 rounded-lg bg-white/55 p-1.5 dark:bg-white/10">
               <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
@@ -3049,28 +3049,28 @@ export default function Home() {
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             </span>
           </button>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-[9rem] flex-1">
             <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">拼豆</p>
             <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">{currentProjectName}</p>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-1 sm:gap-1.5">
-            <button type="button" className="flex min-h-[44px] flex-col items-start rounded-xl bg-white/50 px-2.5 py-1 text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10" title={`色板设置 · ${selectedColorSystem} · ${totalBeadCount || 0} 颗`}>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 sm:gap-1.5">
+            <button type="button" className="flex min-h-10 flex-col items-start rounded-xl bg-white/50 px-2 py-1 text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-2.5" title={`色板设置 · ${selectedColorSystem} · ${totalBeadCount || 0} 颗`}>
               <span className="text-[10px] text-gray-600 dark:text-gray-300">{selectedColorSystem || 'MARD'}</span>
               <span className="text-[11px] font-semibold">{totalBeadCount || 0}</span>
             </button>
-            <button type="button" onClick={handleOpenProjects} className="hidden min-h-[44px] rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block">
+            <button type="button" onClick={handleOpenProjects} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
               我的项目
             </button>
-            <button type="button" onClick={isMounted ? triggerFileInput : undefined} className="min-h-[44px] rounded-xl bg-white/50 px-4 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10">
+            <button type="button" onClick={isMounted ? triggerFileInput : undefined} className="min-h-10 rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-4">
               导入
             </button>
-            <button type="button" onClick={() => setIsDownloadSettingsOpen(true)} disabled={!mappedPixelData} className="min-h-[44px] rounded-xl bg-white/50 px-4 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10">
+            <button type="button" onClick={() => setIsDownloadSettingsOpen(true)} disabled={!mappedPixelData} className="min-h-10 rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-4">
               下载
             </button>
-            <button type="button" onClick={() => persistProject()} disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'} className="min-h-[44px] rounded-xl bg-[#d97757] px-4 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70">
+            <button type="button" onClick={() => persistProject()} disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'} className="min-h-10 rounded-xl bg-[#d97757] px-3 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70 sm:min-h-[44px] sm:px-4">
               {saveStatus === 'saving' ? '保存中' : '保存'}
             </button>
-            <button type="button" onClick={() => setIsShareModalOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="hidden min-h-[44px] rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block">
+            <button type="button" onClick={() => setIsShareModalOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
               分享
             </button>
           </div>
@@ -3293,7 +3293,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-screen-2xl flex-1 gap-3 px-2 py-3 sm:px-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="mx-auto grid w-full max-w-screen-2xl flex-1 gap-3 px-2 py-3 sm:px-4 xl:grid-cols-[minmax(0,1fr)_320px]">
       {/* Apply dark mode styles to the main section */}
       <main ref={mainRef} className="modern-stage w-full overflow-hidden rounded-2xl px-3 py-4 flex flex-col items-center space-y-5 sm:space-y-6 relative sm:px-5">
         <ProjectToolbar
@@ -3517,7 +3517,7 @@ export default function Home() {
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                         </svg>
-                        <span>使用右上角菜单操作</span>
+                        <span>使用悬浮工具栏操作</span>
                       </div>
                       <span className="hidden sm:inline text-gray-300 dark:text-gray-500">|</span>
                       <div className="flex items-center gap-1 w-full sm:w-auto">
@@ -3558,7 +3558,7 @@ export default function Home() {
                         </button>
                       ))}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
                       <span>当前</span>
                       <span
                         className="h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
@@ -3848,7 +3848,7 @@ export default function Home() {
 
       </main>
 
-      <aside className="modern-side-panel hidden rounded-2xl lg:flex">
+      <aside className="modern-side-panel hidden rounded-2xl xl:flex">
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
           <section className="rounded-xl border border-white/50 bg-white/45 p-4 dark:border-white/10 dark:bg-white/5">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">项目</p>
