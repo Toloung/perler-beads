@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, TouchEvent, MouseEvent, useState } from 'react';
+import React, { useRef, useEffect, TouchEvent, MouseEvent, WheelEvent, useState } from 'react';
 import { MappedPixel } from '../utils/pixelation';
 import { GridSelection } from '../utils/gridEditing';
 
@@ -158,6 +158,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [hoverCell, setHoverCell] = useState<{ row: number; col: number } | null>(null);
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
+  const baseDisplaySizeRef = useRef<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -176,6 +177,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       canvas.width = nextWidth;
       canvas.height = nextHeight;
     }
+    baseDisplaySizeRef.current = { width: nextWidth, height: nextHeight };
     setDisplaySize((current) => (
       current?.width === nextWidth && current?.height === nextHeight
         ? current
@@ -339,6 +341,45 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, isManualColoringMode);
   };
 
+  const handleWheel = (event: WheelEvent<HTMLCanvasElement>) => {
+    if (!isManualColoringMode || !canvasRef.current || !gridDimensions) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const canvas = canvasRef.current;
+    const scroller = canvas.parentElement;
+    const canvasRect = canvas.getBoundingClientRect();
+    const scrollerRect = scroller?.getBoundingClientRect();
+    const pointerOffsetX = event.clientX - canvasRect.left;
+    const pointerOffsetY = event.clientY - canvasRect.top;
+    const pointerRatioX = canvasRect.width > 0 ? pointerOffsetX / canvasRect.width : 0.5;
+    const pointerRatioY = canvasRect.height > 0 ? pointerOffsetY / canvasRect.height : 0.5;
+
+    setDisplaySize((current) => {
+      const base = baseDisplaySizeRef.current || {
+        width: canvas.width,
+        height: canvas.height,
+      };
+      const currentSize = current || base;
+      const zoomFactor = event.deltaY < 0 ? 1.12 : 0.88;
+      const minWidth = Math.max(220, base.width * 0.5);
+      const maxWidth = Math.min(5000, base.width * 5);
+      const nextWidth = Math.round(Math.max(minWidth, Math.min(maxWidth, currentSize.width * zoomFactor)));
+      const nextHeight = Math.round(nextWidth * (base.height / base.width));
+
+      if (scroller && scrollerRect) {
+        window.requestAnimationFrame(() => {
+          const nextRect = canvas.getBoundingClientRect();
+          scroller.scrollLeft = nextRect.left + pointerRatioX * nextRect.width - scrollerRect.left + scroller.scrollLeft - pointerOffsetX;
+          scroller.scrollTop = nextRect.top + pointerRatioY * nextRect.height - scrollerRect.top + scroller.scrollTop - pointerOffsetY;
+        });
+      }
+
+      return { width: nextWidth, height: nextHeight };
+    });
+  };
+
   // --- Touch events ---
   // Used to distinguish taps from intentional movement.
   const handleTouchStart = (event: TouchEvent<HTMLCanvasElement>) => {
@@ -443,7 +484,8 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
-      className={`border border-gray-300 dark:border-gray-600 max-w-full h-auto rounded block ${
+      onWheel={handleWheel}
+      className={`border border-gray-300 dark:border-gray-600 h-auto rounded block ${isManualColoringMode ? 'max-w-none' : 'max-w-full'} ${
         isPanTool ? 'cursor-grab active:cursor-grabbing' : isManualColoringMode ? 'cursor-crosshair' : 'cursor-grab'
       }`}
       style={{

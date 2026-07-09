@@ -3901,7 +3901,10 @@ export default function Home() {
             <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-3">点击下方列表中的颜色可将其从可用列表中排除。总计: {totalBeadCount} 颗</p>
             <ul className="space-y-1 max-h-60 overflow-y-auto pr-2 text-sm">
               {Object.keys(colorCounts)
-                .sort(sortColorKeys)
+                .sort((a, b) => {
+                  const countDelta = colorCounts[a].count - colorCounts[b].count;
+                  return countDelta !== 0 ? countDelta : sortColorKeys(a, b);
+                })
                 .map((hexKey) => {
                   // 现在key是hex值，需要通过hex获取对应色号系统的色号
                   const displayColorKey = getColorKeyByHex(hexKey, selectedColorSystem);
