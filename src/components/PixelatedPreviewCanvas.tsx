@@ -367,47 +367,10 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   };
 
   const handleWheel = (event: WheelEvent<HTMLCanvasElement>) => {
-    if (!isManualColoringMode || !canvasRef.current || !gridDimensions) return;
+    if (!isManualColoringMode) return;
 
     event.preventDefault();
     event.stopPropagation();
-
-    const canvas = canvasRef.current;
-    const stage = canvas.parentElement;
-    const canvasRect = canvas.getBoundingClientRect();
-    const stageRect = stage?.getBoundingClientRect();
-    const pointerOffsetX = event.clientX - canvasRect.left;
-    const pointerOffsetY = event.clientY - canvasRect.top;
-    const pointerRatioX = canvasRect.width > 0 ? pointerOffsetX / canvasRect.width : 0.5;
-    const pointerRatioY = canvasRect.height > 0 ? pointerOffsetY / canvasRect.height : 0.5;
-
-    setDisplaySize((current) => {
-      const base = baseDisplaySizeRef.current || {
-        width: canvas.width,
-        height: canvas.height,
-      };
-      const currentSize = current || base;
-      const zoomFactor = event.deltaY < 0 ? 1.12 : 0.88;
-      const minWidth = Math.max(40, base.width * 0.08);
-      const maxWidth = Math.min(200000, base.width * 240);
-      const nextWidth = Math.round(Math.max(minWidth, Math.min(maxWidth, currentSize.width * zoomFactor)));
-      const nextHeight = Math.round(nextWidth * (base.height / base.width));
-
-      if (stageRect) {
-        setCanvasOffset(() => {
-          const stageCenterX = stageRect.left + stageRect.width / 2;
-          const stageCenterY = stageRect.top + stageRect.height / 2;
-          const nextLeft = event.clientX - pointerRatioX * nextWidth;
-          const nextTop = event.clientY - pointerRatioY * nextHeight;
-          return {
-            x: nextLeft - stageCenterX + nextWidth / 2,
-            y: nextTop - stageCenterY + nextHeight / 2,
-          };
-        });
-      }
-
-      return { width: nextWidth, height: nextHeight };
-    });
   };
 
   // --- Touch events ---
