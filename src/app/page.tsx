@@ -83,9 +83,10 @@ const fullBeadPalette: PaletteColor[] = Object.entries(mardToHexMapping)
   })
   .filter((color): color is PaletteColor => color !== null);
 
-type ManualEditTool = 'brush' | 'eraser' | 'picker' | 'fill' | 'line' | 'rect' | 'select' | 'move' | 'paste';
+type ManualEditTool = import('../components/ManualEditDock').ManualEditTool;
 
 const manualEditTools: { tool: ManualEditTool; label: string; title: string }[] = [
+  { tool: 'pan', label: '拖拽', title: '拖拽画布进行平移' },
   { tool: 'brush', label: '画笔', title: '单格上色，按住拖动可连续绘制' },
   { tool: 'eraser', label: '橡皮', title: '单格擦除，按住拖动可连续擦除' },
   { tool: 'picker', label: '取色', title: '从画布中选择颜色' },
@@ -107,6 +108,7 @@ import FloatingColorPalette from '../components/FloatingColorPalette';
 import FloatingToolbar from '../components/FloatingToolbar';
 import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
+import ManualEditDock from '../components/ManualEditDock';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
 import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtils';
 import {
@@ -2262,7 +2264,7 @@ export default function Home() {
   const handleManualCanvasEdit = useCallback((row: number, col: number) => {
     if (!mappedPixelData || !gridDimensions) return;
 
-    if (manualEditTool === 'select' || manualEditTool === 'move' || manualEditTool === 'paste') {
+    if (manualEditTool === 'pan' || manualEditTool === 'select' || manualEditTool === 'move' || manualEditTool === 'paste') {
       return;
     }
 
@@ -2381,7 +2383,7 @@ export default function Home() {
     row: number,
     col: number
   ) => {
-    if (!isManualColoringMode || !mappedPixelData || !gridDimensions) return;
+    if (!isManualColoringMode || !mappedPixelData || !gridDimensions || manualEditTool === 'pan') return;
 
     if (manualEditTool === 'select') {
       if (phase === 'down') {
@@ -3096,6 +3098,36 @@ export default function Home() {
             <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">拼豆</p>
             <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">{currentProjectName}</p>
           </div>
+          {mappedPixelData && gridDimensions && (
+            <div className="order-last flex w-full justify-center gap-1 sm:order-none sm:w-auto">
+              {[
+                { label: '优化', active: !isManualColoringMode, action: () => setIsManualColoringMode(false) },
+                { label: '编辑', active: isManualColoringMode, action: () => {
+                  setIsManualColoringMode(true);
+                  setManualEditTool(prev => prev === 'pan' ? prev : 'pan');
+                  setSelectedColor(prev => prev || getDefaultPaintColor());
+                  setShowFullPalette(true);
+                  setIsFloatingPaletteOpen(false);
+                  setTooltipData(null);
+                } },
+                { label: '预览', active: false, action: () => setIsManualColoringMode(false) },
+                { label: '拼豆', active: false, action: handleEnterFocusMode },
+              ].map(item => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.action}
+                  className={`min-h-9 rounded-xl px-3 text-xs font-medium transition-colors sm:px-4 ${
+                    item.active
+                      ? 'bg-[#d97757] text-white'
+                      : 'text-gray-700 active:bg-white/50 dark:text-gray-200 dark:active:bg-white/10'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex min-w-0 basis-full flex-wrap items-center justify-start gap-1 sm:basis-auto sm:flex-1 sm:justify-end sm:gap-1.5">
             <button type="button" className="flex min-h-10 flex-col items-start rounded-xl bg-white/50 px-2 py-1 text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-2.5" title={`色板设置 · ${selectedColorSystem} · ${totalBeadCount || 0} 颗`}>
               <span className="text-[10px] text-gray-600 dark:text-gray-300">{selectedColorSystem || 'MARD'}</span>
@@ -3336,28 +3368,32 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-screen-2xl flex-1 gap-3 px-2 py-3 sm:px-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={`mx-auto grid w-full max-w-screen-2xl flex-1 gap-3 px-2 py-3 sm:px-4 ${
+        isManualColoringMode ? 'xl:grid-cols-1 xl:pl-[88px] xl:pr-[328px]' : 'xl:grid-cols-[minmax(0,1fr)_320px]'
+      }`}>
       {/* Apply dark mode styles to the main section */}
       <main ref={mainRef} className="modern-stage w-full overflow-hidden rounded-2xl px-3 py-4 flex flex-col items-center space-y-5 sm:space-y-6 relative sm:px-5">
-        <ProjectToolbar
-          projectName={currentProjectName}
-          saveStatus={saveStatus}
-          disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'}
-          onSave={() => persistProject()}
-          onSaveAs={() => persistProject({ saveAs: true })}
-          onOpenProjects={handleOpenProjects}
-          onEditImage={() => setIsImageEditorOpen(true)}
-          onCanvasTools={() => setIsCanvasToolsOpen(true)}
-          onShare={() => setIsShareModalOpen(true)}
-          onImportShare={() => setIsShareModalOpen(true)}
-          onNameChange={(name) => {
-            setCurrentProjectName(name);
-            if (mappedPixelData && gridDimensions) {
-              setHasUnsavedChanges(true);
-              setSaveStatus('dirty');
-            }
-          }}
-        />
+        {!isManualColoringMode && (
+          <ProjectToolbar
+            projectName={currentProjectName}
+            saveStatus={saveStatus}
+            disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'}
+            onSave={() => persistProject()}
+            onSaveAs={() => persistProject({ saveAs: true })}
+            onOpenProjects={handleOpenProjects}
+            onEditImage={() => setIsImageEditorOpen(true)}
+            onCanvasTools={() => setIsCanvasToolsOpen(true)}
+            onShare={() => setIsShareModalOpen(true)}
+            onImportShare={() => setIsShareModalOpen(true)}
+            onNameChange={(name) => {
+              setCurrentProjectName(name);
+              if (mappedPixelData && gridDimensions) {
+                setHasUnsavedChanges(true);
+                setSaveStatus('dirty');
+              }
+            }}
+          />
+        )}
 
         {/* Apply dark mode styles to the Drop Zone */}
         {!mappedPixelData && (
@@ -3378,7 +3414,7 @@ export default function Home() {
           </div>
         )}
 
-        {mappedPixelData && (
+        {mappedPixelData && !isManualColoringMode && (
           <div
             role="button"
             tabIndex={0}
@@ -3399,7 +3435,7 @@ export default function Home() {
         )}
 
         {/* Apply dark mode styles to the Tip Box */}
-        {!originalImageSrc && (
+        {!originalImageSrc && !isManualColoringMode && (
           <div className="w-full md:max-w-md bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 p-3 rounded-lg border border-blue-100 dark:border-gray-600 shadow-sm">
             {/* Icon color */}
             <p className="text-xs text-indigo-700 dark:text-indigo-300 flex items-start">
@@ -3576,7 +3612,7 @@ export default function Home() {
               <canvas ref={originalCanvasRef} className="hidden"></canvas>
 
               {/* ++ 手动编辑模式提示信息 ++ */}
-              {isManualColoringMode && mappedPixelData && gridDimensions && (
+              {false && isManualColoringMode && mappedPixelData && gridDimensions && (
                 <div className="w-full mb-4 p-3 bg-blue-50 dark:bg-gray-800 rounded-lg shadow-sm border border-blue-100 dark:border-gray-700">
                   <div className="flex justify-center">
                     <div className="bg-blue-50 dark:bg-gray-700 border border-blue-100 dark:border-gray-600 rounded-lg p-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 text-xs text-gray-600 dark:text-gray-300 w-full sm:w-auto">
@@ -3598,7 +3634,7 @@ export default function Home() {
                 </div>
               )}
 
-              {isManualColoringMode && mappedPixelData && gridDimensions && (
+              {false && isManualColoringMode && mappedPixelData && gridDimensions && (
                 <div className="mb-4 w-full rounded-xl border border-gray-200 bg-white/90 p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800/90">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap gap-2">
@@ -3635,17 +3671,17 @@ export default function Home() {
                         {manualEditTool === 'eraser'
                           ? '橡皮'
                           : selectedColor
-                            ? getColorKeyByHex(selectedColor.color, selectedColorSystem)
+                            ? getColorKeyByHex(selectedColor?.color || '#FFFFFF', selectedColorSystem)
                             : '未选颜色'}
                       </span>
                       {manualShapeStart && (
                         <span className="rounded bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-                          已选起点 {manualShapeStart.col + 1},{manualShapeStart.row + 1}
+                          已选起点 {(manualShapeStart?.col ?? 0) + 1},{(manualShapeStart?.row ?? 0) + 1}
                         </span>
                       )}
                       {activeSelection && (
                         <span className="rounded bg-blue-100 px-2 py-1 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
-                          选区 {Math.abs(activeSelection.endCol - activeSelection.startCol) + 1}x{Math.abs(activeSelection.endRow - activeSelection.startRow) + 1}
+                          选区 {Math.abs((activeSelection?.endCol ?? 0) - (activeSelection?.startCol ?? 0)) + 1}x{Math.abs((activeSelection?.endRow ?? 0) - (activeSelection?.startRow ?? 0)) + 1}
                         </span>
                       )}
                     </div>
@@ -3695,6 +3731,7 @@ export default function Home() {
                     activeSelection={activeSelection}
                     isManualColoringMode={isManualColoringMode}
                     continuousManualInput={manualEditTool === 'brush' || manualEditTool === 'eraser'}
+                    isPanTool={manualEditTool === 'pan'}
                     onInteraction={handleCanvasInteraction}
                     onManualPointerCell={handleManualPointerCell}
                     highlightColorKey={highlightColorKey}
@@ -3915,7 +3952,7 @@ export default function Home() {
 
       </main>
 
-      <aside className="modern-side-panel hidden rounded-2xl xl:flex">
+      <aside className={`modern-side-panel hidden rounded-2xl ${isManualColoringMode ? 'xl:hidden' : 'xl:flex'}`}>
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
           <section className="rounded-xl border border-white/50 bg-white/45 p-4 dark:border-white/10 dark:bg-white/5">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">项目</p>
@@ -3968,9 +4005,66 @@ export default function Home() {
       </aside>
       </div>
 
+      {isManualColoringMode && (
+        <ManualEditDock
+          activeTool={manualEditTool}
+          onToolChange={(tool) => {
+            setManualEditTool(tool);
+            setManualShapeStart(null);
+            if (tool === 'brush' || tool === 'pan' || tool === 'fill' || tool === 'line' || tool === 'rect' || tool === 'select' || tool === 'move' || tool === 'paste') {
+              setIsEraseMode(false);
+              setColorReplaceState({ isActive: false, step: 'select-source' });
+            }
+            if (tool === 'eraser') {
+              setIsEraseMode(true);
+              setSelectedColor(transparentColorData);
+            }
+          }}
+          selectedColor={selectedColor}
+          selectedColorSystem={selectedColorSystem}
+          currentGridColors={currentGridColors}
+          fullPaletteColors={fullPaletteColors}
+          showFullPalette={showFullPalette}
+          onToggleFullPalette={handleToggleFullPalette}
+          onColorSelect={handleColorSelect}
+          onExitManualMode={() => {
+            setIsManualColoringMode(false);
+            setManualEditTool('brush');
+            setManualShapeStart(null);
+            setActiveSelection(null);
+            setSelectionDragStart(null);
+            setSelectionMoveState(null);
+            setSelectedColor(null);
+            setTooltipData(null);
+            setIsEraseMode(false);
+            setColorReplaceState({ isActive: false, step: 'select-source' });
+            setHighlightColorKey(null);
+            setIsMagnifierActive(false);
+            setMagnifierSelectionArea(null);
+            clearEditHistory();
+          }}
+          onCanvasTools={() => setIsCanvasToolsOpen(true)}
+          onToggleMagnifier={handleToggleMagnifier}
+          isMagnifierActive={isMagnifierActive}
+          canUndo={editHistory.length > 0}
+          onUndo={handleUndoEdit}
+          gridDimensions={gridDimensions}
+          totalBeadCount={totalBeadCount}
+          projectName={currentProjectName}
+          manualShapeStart={manualShapeStart}
+          activeSelection={activeSelection}
+          hasClipboard={Boolean(selectionClipboard)}
+          onCopySelection={handleCopyActiveSelection}
+          onCutSelection={handleCutActiveSelection}
+          onDeleteSelection={handleDeleteActiveSelection}
+          onPasteAtSelection={handlePasteAtSelection}
+          onClearSelection={() => setActiveSelection(null)}
+        />
+      )}
+
       {/* 悬浮工具栏 */}
       <FloatingToolbar
-        isManualColoringMode={isManualColoringMode}
+        isManualColoringMode={false}
         isPaletteOpen={isFloatingPaletteOpen}
         onTogglePalette={() => setIsFloatingPaletteOpen(!isFloatingPaletteOpen)}
         onExitManualMode={() => {
@@ -3997,7 +4091,7 @@ export default function Home() {
       />
 
       {/* 悬浮调色盘 */}
-      {isManualColoringMode && (
+      {false && isManualColoringMode && (
         <FloatingColorPalette
           colors={currentGridColors}
           selectedColor={selectedColor}
@@ -4051,13 +4145,13 @@ export default function Home() {
         </>
       )}
 
-      {/* Apply dark mode styles to the Footer */}
-      <footer className="w-full md:max-w-4xl mt-10 mb-6 py-6 text-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800/50 rounded-lg shadow-inner">
-        {/* Copyright text color */}
-        <p className="font-medium text-gray-600 dark:text-gray-300">
-          拼豆底稿生成器 &copy; {new Date().getFullYear()}
-        </p>
-      </footer>
+      {!isManualColoringMode && (
+        <footer className="w-full md:max-w-4xl mt-10 mb-6 py-6 text-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800/50 rounded-lg shadow-inner">
+          <p className="font-medium text-gray-600 dark:text-gray-300">
+            拼豆底稿生成器 &copy; {new Date().getFullYear()}
+          </p>
+        </footer>
+      )}
 
       {/* 使用导入的下载设置弹窗组件 */}
       <DownloadSettingsModal 
