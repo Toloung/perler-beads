@@ -125,7 +125,8 @@ import {
 import FocusModePreDownloadModal from '../components/FocusModePreDownloadModal';
 import ModernWorkspaceShell from '../components/ModernWorkspaceShell';
 import { ConflictModal, ProjectListModal, ProjectToolbar } from '../components/ProjectManager';
-import ShareCodeModal from '../components/ShareCodeModal';
+import PreviewCardModal from '../components/PreviewCardModal';
+import ShareCodeModal, { ShareGenerateOptions, SharePanel } from '../components/ShareCodeModal';
 import { ProjectDetail, ProjectState, ProjectSummary, SaveStatus, VersionConflict } from '../types/projectTypes';
 import {
   createProjectOnServer,
@@ -257,7 +258,9 @@ export default function Home() {
   const [isProjectsLoading, setIsProjectsLoading] = useState<boolean>(false);
   const [versionConflict, setVersionConflict] = useState<VersionConflict | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareModalInitialPanel, setShareModalInitialPanel] = useState<SharePanel>('share');
   const [shareCode, setShareCode] = useState<string>('');
   const [isShareCodeGenerating, setIsShareCodeGenerating] = useState<boolean>(false);
   const [isImageEditorOpen, setIsImageEditorOpen] = useState<boolean>(false);
@@ -275,6 +278,11 @@ export default function Home() {
   const skipNextPixelateRef = useRef(false);
   const lastSavedSnapshotRef = useRef<string>('');
   const latestStateSnapshotRef = useRef<string>('');
+
+  const openShareModal = useCallback((panel: SharePanel = 'share') => {
+    setShareModalInitialPanel(panel);
+    setIsShareModalOpen(true);
+  }, []);
 
   // 放大镜切换处理函数
   const handleToggleMagnifier = () => {
@@ -996,7 +1004,7 @@ export default function Home() {
     }
   }, [currentProjectId, refreshProjects, showToast]);
 
-  const handleGenerateShareCode = useCallback(async (password?: string) => {
+  const handleGenerateShareCode = useCallback(async (options: ShareGenerateOptions) => {
     if (!mappedPixelData || !gridDimensions) {
       showToast('请先生成拼豆图纸');
       return;
@@ -1005,9 +1013,9 @@ export default function Home() {
     setIsShareCodeGenerating(true);
     try {
       const code = await createShareCode({
-        name: currentProjectName.trim() || '未命名项目',
+        name: options.name?.trim() || currentProjectName.trim() || '未命名项目',
         state: buildProjectState(),
-        password,
+        password: options.visibility === 'private' ? options.password : undefined,
       });
       setShareCode(code);
       await navigator.clipboard?.writeText(code);
@@ -2988,8 +2996,8 @@ export default function Home() {
           onSave={() => persistProject()}
           onSaveAs={() => persistProject({ saveAs: true })}
           onDownload={() => setIsDownloadSettingsOpen(true)}
-          onShare={() => setIsShareModalOpen(true)}
-          onImportShare={() => setIsShareModalOpen(true)}
+          onShare={() => openShareModal('share')}
+          onImportShare={() => openShareModal('import')}
         />
         <ProjectListModal
           open={isProjectsModalOpen}
@@ -3016,6 +3024,8 @@ export default function Home() {
           shareCode={shareCode}
           isGenerating={isShareCodeGenerating}
           canShare={Boolean(mappedPixelData && gridDimensions)}
+          projectName={currentProjectName}
+          initialPanel={shareModalInitialPanel}
           onClose={() => setIsShareModalOpen(false)}
           onGenerate={handleGenerateShareCode}
           onImport={handleImportShareCode}
@@ -3110,7 +3120,7 @@ export default function Home() {
                   setIsFloatingPaletteOpen(false);
                   setTooltipData(null);
                 } },
-                { label: '预览', active: false, action: () => setIsManualColoringMode(false) },
+                { label: '预览', active: false, action: () => setIsPreviewModalOpen(true) },
                 { label: '拼豆', active: false, action: handleEnterFocusMode },
               ].map(item => (
                 <button
@@ -3145,7 +3155,7 @@ export default function Home() {
             <button type="button" onClick={() => persistProject()} disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'} className="min-h-10 rounded-xl bg-[#d97757] px-3 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70 sm:min-h-[44px] sm:px-4">
               {saveStatus === 'saving' ? '保存中' : '保存'}
             </button>
-            <button type="button" onClick={() => setIsShareModalOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
+            <button type="button" onClick={() => openShareModal('share')} disabled={!mappedPixelData || !gridDimensions} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
               分享
             </button>
           </div>
@@ -3383,8 +3393,8 @@ export default function Home() {
             onOpenProjects={handleOpenProjects}
             onEditImage={() => setIsImageEditorOpen(true)}
             onCanvasTools={() => setIsCanvasToolsOpen(true)}
-            onShare={() => setIsShareModalOpen(true)}
-            onImportShare={() => setIsShareModalOpen(true)}
+            onShare={() => openShareModal('share')}
+            onImportShare={() => openShareModal('import')}
             onNameChange={(name) => {
               setCurrentProjectName(name);
               if (mappedPixelData && gridDimensions) {
@@ -3989,7 +3999,7 @@ export default function Home() {
               <button type="button" onClick={() => setIsCanvasToolsOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
                 画布工具
               </button>
-              <button type="button" onClick={() => setIsShareModalOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
+              <button type="button" onClick={() => openShareModal('import')} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
                 分享码导入/导出
               </button>
             </div>
@@ -4199,9 +4209,20 @@ export default function Home() {
         shareCode={shareCode}
         isGenerating={isShareCodeGenerating}
         canShare={Boolean(mappedPixelData && gridDimensions)}
+        projectName={currentProjectName}
+        initialPanel={shareModalInitialPanel}
         onClose={() => setIsShareModalOpen(false)}
         onGenerate={handleGenerateShareCode}
         onImport={handleImportShareCode}
+      />
+
+      <PreviewCardModal
+        open={isPreviewModalOpen}
+        mappedPixelData={mappedPixelData}
+        gridDimensions={gridDimensions}
+        totalBeadCount={totalBeadCount}
+        projectName={currentProjectName}
+        onClose={() => setIsPreviewModalOpen(false)}
       />
 
       <ImageEditorModal
