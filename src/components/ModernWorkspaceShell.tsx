@@ -82,7 +82,7 @@ export default function ModernWorkspaceShell({
   onImportShare: () => void;
 }) {
   return (
-    <div className="modern-workspace w-full">
+    <div className="modern-workspace min-h-screen w-full overflow-x-hidden">
       <header className="sticky top-0 z-40 w-full px-2 pb-1 pt-2 sm:px-4">
         <div className="modern-glass mx-auto flex min-h-14 w-full max-w-screen-2xl flex-wrap items-center gap-2 rounded-2xl px-2 py-1.5 sm:gap-3">
           <button type="button" className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg active:opacity-70" title="回到首页">
@@ -123,11 +123,11 @@ export default function ModernWorkspaceShell({
         </div>
       </header>
 
-      <section className="mx-auto grid w-full max-w-screen-2xl gap-3 px-2 py-3 sm:px-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="modern-stage min-h-[360px] overflow-hidden rounded-2xl">
+      <section className="mx-auto grid min-h-[calc(100vh-74px)] w-full max-w-screen-2xl gap-3 px-2 py-3 sm:px-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="modern-stage flex min-h-[calc(100vh-104px)] overflow-hidden rounded-2xl">
           {!hasCanvas && (
-            <div className="flex min-h-[360px] flex-col items-center justify-center p-4 sm:p-8">
-              <div className="flex w-full max-w-2xl flex-col items-center gap-6 sm:w-auto sm:flex-row sm:gap-14">
+            <div className="flex min-h-full w-full flex-col items-center justify-center p-4 sm:p-8">
+              <div className="flex w-full max-w-3xl flex-col items-center gap-6 sm:w-auto sm:flex-row sm:gap-12 lg:gap-14">
                 <BeadMascot />
                 <div className="modern-welcome-content flex w-full flex-col items-center gap-4 sm:w-auto sm:items-start sm:gap-6">
                   <div className="space-y-1.5 text-center sm:space-y-2 sm:text-left">
@@ -161,7 +161,7 @@ export default function ModernWorkspaceShell({
           )}
         </div>
 
-        <aside className="modern-side-panel hidden rounded-2xl xl:flex">
+        <aside className="modern-side-panel hidden min-h-[calc(100vh-104px)] rounded-2xl xl:flex">
           <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
             <section className="rounded-xl border border-white/50 bg-white/40 dark:border-white/10 dark:bg-white/5">
               <div className="px-4 py-3">

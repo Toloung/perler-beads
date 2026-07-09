@@ -144,7 +144,7 @@ export default function Home() {
   const [similarityThreshold, setSimilarityThreshold] = useState<number>(30);
   const [similarityThresholdInput, setSimilarityThresholdInput] = useState<string>("30");
   // 添加像素化模式状态
-  const [pixelationMode, setPixelationMode] = useState<PixelationMode>(PixelationMode.Dominant); // 默认为卡通模式
+  const [pixelationMode, setPixelationMode] = useState<PixelationMode>(PixelationMode.JettCartoon); // 默认使用 Jett Cartoon
   
   // 新增：色号系统选择状态
   const [selectedColorSystem, setSelectedColorSystem] = useState<ColorSystem>('MARD');
@@ -3497,10 +3497,10 @@ export default function Home() {
                       onChange={handlePixelationModeChange}
                       className="w-full p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 h-9 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200"
                     >
-                      <option value={PixelationMode.Dominant} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">卡通 (主色)</option>
-                      <option value={PixelationMode.Average} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">真实 (平均)</option>
                       <option value={PixelationMode.JettCartoon} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">Jett Cartoon</option>
                       <option value={PixelationMode.JettRealistic} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">Jett Realistic</option>
+                      <option value={PixelationMode.Dominant} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">卡通 (主色)</option>
+                      <option value={PixelationMode.Average} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">真实 (平均)</option>
                     </select>
                   </div>
                 </div>
