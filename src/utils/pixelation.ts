@@ -2,6 +2,8 @@ import { transparentColorData } from './pixelEditingUtils';
 
 // 定义像素化模式
 export enum PixelationMode {
+  JettCartoon = 'jett-cartoon',
+  JettRealistic = 'jett-realistic',
   Dominant = 'dominant', // 卡通模式（主色）
   Average = 'average',   // 真实模式（平均色）
 }

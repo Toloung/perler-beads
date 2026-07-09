@@ -17,6 +17,7 @@ import {
   colorDistance,
   findClosestPaletteColor
 } from '../utils/pixelation';
+import { calculateJettPixelGrid, isJettMode } from '../utils/jettPixelation';
 
 // 导入新的类型和组件
 import { GridDownloadOptions } from '../types/downloadTypes';
@@ -271,6 +272,7 @@ export default function Home() {
   const isRestoringProjectRef = useRef(false);
   const skipNextPixelateRef = useRef(false);
   const lastSavedSnapshotRef = useRef<string>('');
+  const latestStateSnapshotRef = useRef<string>('');
 
   // 放大镜切换处理函数
   const handleToggleMagnifier = () => {
@@ -844,6 +846,7 @@ export default function Home() {
     setSaveStatus('saved');
     setHasUnsavedChanges(false);
     lastSavedSnapshotRef.current = JSON.stringify(state);
+    latestStateSnapshotRef.current = lastSavedSnapshotRef.current;
 
     window.setTimeout(() => {
       isRestoringProjectRef.current = false;
@@ -877,6 +880,8 @@ export default function Home() {
     }
 
     const state = buildProjectState();
+    const stateSnapshot = JSON.stringify(state);
+    latestStateSnapshotRef.current = stateSnapshot;
     const thumbnail = generateProjectThumbnail(mappedPixelData, gridDimensions);
     const name = currentProjectName.trim() || '未命名项目';
 
@@ -896,10 +901,14 @@ export default function Home() {
       setCurrentProjectId(project.id);
       setCurrentProjectName(project.name);
       setCurrentProjectVersion(project.version);
-      setSaveStatus('saved');
-      setHasUnsavedChanges(false);
+      const hasNewerLocalChanges = latestStateSnapshotRef.current !== '' && latestStateSnapshotRef.current !== stateSnapshot;
+      setSaveStatus(hasNewerLocalChanges ? 'dirty' : 'saved');
+      setHasUnsavedChanges(hasNewerLocalChanges);
       setVersionConflict(null);
-      lastSavedSnapshotRef.current = JSON.stringify(state);
+      lastSavedSnapshotRef.current = stateSnapshot;
+      if (!hasNewerLocalChanges) {
+        latestStateSnapshotRef.current = stateSnapshot;
+      }
       showToast(options?.saveAs ? '已另存为新项目' : '已保存');
       if (isProjectsModalOpen) {
         refreshProjects();
@@ -1171,6 +1180,7 @@ export default function Home() {
     }
 
     const snapshot = JSON.stringify(buildProjectState());
+    latestStateSnapshotRef.current = snapshot;
     if (snapshot === lastSavedSnapshotRef.current) {
       return;
     }
@@ -1191,10 +1201,30 @@ export default function Home() {
 
     const timer = window.setTimeout(() => {
       persistProject();
-    }, 4000);
+    }, 900);
 
     return () => window.clearTimeout(timer);
   }, [hasUnsavedChanges, saveStatus, mappedPixelData, gridDimensions, persistProject]);
+
+  useEffect(() => {
+    if (!currentProjectId || hasUnsavedChanges || saveStatus === 'saving' || saveStatus === 'conflict') {
+      return;
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const project = await fetchProject(currentProjectId);
+        if (project.version > currentProjectVersion && !hasUnsavedChanges) {
+          applyProject(project);
+          showToast('Server changes synced');
+        }
+      } catch (error) {
+        console.warn('Failed to sync remote project version:', error);
+      }
+    }, 2500);
+
+    return () => window.clearInterval(timer);
+  }, [currentProjectId, currentProjectVersion, hasUnsavedChanges, saveStatus, applyProject, showToast]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -1517,17 +1547,28 @@ export default function Home() {
       console.log("Original image drawn.");
 
       // 1. 使用calculatePixelGrid进行初始颜色映射
-      console.log("Starting initial color mapping using calculatePixelGrid...");
-      const initialMappedData = calculatePixelGrid(
-          originalCtx,
-          img.width,
-          img.height,
-          N,
-          M,
-          currentPalette, 
-          mode,
-          t1FallbackColor
-      );
+      console.log("Starting initial color mapping...");
+      const initialMappedData = isJettMode(mode)
+        ? calculateJettPixelGrid(
+            originalCtx,
+            img.width,
+            img.height,
+            N,
+            M,
+            currentPalette,
+            mode,
+            threshold
+          )
+        : calculatePixelGrid(
+            originalCtx,
+            img.width,
+            img.height,
+            N,
+            M,
+            currentPalette,
+            mode,
+            t1FallbackColor
+          );
       console.log(`Initial data mapping complete using mode ${mode}. Starting global color merging...`);
 
       // --- 新的全局颜色合并逻辑 ---
@@ -1570,7 +1611,7 @@ export default function Home() {
       const replacedColors = new Set<string>();
       
       // 对每个颜色按频率从高到低处理
-      for (let i = 0; i < colorsByFrequency.length; i++) {
+      if (!isJettMode(mode)) for (let i = 0; i < colorsByFrequency.length; i++) {
           const currentKey = colorsByFrequency[i];
           
           // 如果当前颜色已经被合并到更频繁的颜色中，跳过
@@ -1652,6 +1693,8 @@ export default function Home() {
         setColorCounts(counts);
         setTotalBeadCount(totalCount);
         setInitialGridColorKeys(new Set(Object.keys(counts)));
+        setSaveStatus('dirty');
+        setHasUnsavedChanges(true);
         console.log("Color counts updated based on merged data (after merging):", counts);
         console.log("Total bead count (total beads):", totalCount);
         console.log("Stored initial grid color keys:", Object.keys(counts));
@@ -3456,6 +3499,8 @@ export default function Home() {
                     >
                       <option value={PixelationMode.Dominant} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">卡通 (主色)</option>
                       <option value={PixelationMode.Average} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">真实 (平均)</option>
+                      <option value={PixelationMode.JettCartoon} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">Jett Cartoon</option>
+                      <option value={PixelationMode.JettRealistic} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">Jett Realistic</option>
                     </select>
                   </div>
                 </div>

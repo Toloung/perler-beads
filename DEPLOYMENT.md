@@ -8,7 +8,7 @@
 cd /home/ubuntu/perler-beads
 npm install
 npm run build
-PORT=3100 PERLER_DATA_DIR=/data/perler npm run start
+PORT=3100 PERLER_DATA_DIR=/data/perler PERLER_APP_PASSWORD='change-this-password' npm run start
 ```
 
 `PERLER_DATA_DIR` 会自动创建，默认结构如下：
@@ -23,7 +23,7 @@ PORT=3100 PERLER_DATA_DIR=/data/perler npm run start
 
 ```bash
 cd /home/ubuntu/perler-beads
-PORT=3100 PERLER_DATA_DIR=/data/perler pm2 start "npm run start" --name perler-beads
+PORT=3100 PERLER_DATA_DIR=/data/perler PERLER_APP_PASSWORD='change-this-password' pm2 start "npm run start" --name perler-beads
 pm2 save
 ```
 
