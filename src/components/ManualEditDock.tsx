@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { ReactNode } from 'react';
 import { GridSelection } from '../utils/gridEditing';
@@ -20,7 +20,7 @@ type ManualEditDockProps = {
   activeLayerId: string | null;
   onLayerSelect: (layerId: string) => void;
   onAddLayer: () => void;
-  onDuplicateLayer: () => void;
+  onDuplicateLayer: (layerId: string) => void;
   onDeleteLayer: (layerId: string) => void;
   onToggleLayerVisibility: (layerId: string) => void;
   onToggleLayerLock: (layerId: string) => void;
@@ -191,27 +191,27 @@ const icons = {
 };
 
 const tools: Array<{ tool: ManualEditTool; label: string; title: string; icon: ReactNode }> = [
-  { tool: 'pan', label: '鎷栨嫿', title: '鎷栨嫿鐢诲竷杩涜骞崇Щ', icon: icons.pan },
-  { tool: 'brush', label: '鐢荤瑪', title: '鎸変綇鎷栧姩杩炵画涓婅壊', icon: icons.brush },
-  { tool: 'eraser', label: '姗＄毊', title: '鎸変綇鎷栧姩杩炵画鎿﹂櫎', icon: icons.eraser },
-  { tool: 'picker', label: '鍙栬壊', title: '浠庣敾甯冨彇鑹?, icon: icons.picker },
-  { tool: 'fill', label: '濉厖', title: '濉厖鐩搁偦鍚岃壊鍖哄煙', icon: icons.fill },
-  { tool: 'line', label: '鐩寸嚎', title: '鐐瑰嚮璧风偣锛屽啀鐐瑰嚮缁堢偣', icon: icons.line },
-  { tool: 'rect', label: '鐭╁舰', title: '鐐瑰嚮璧风偣锛屽啀鐐瑰嚮瀵硅鐐?, icon: icons.rect },
-  { tool: 'select', label: '閫夊尯', title: '鎷栧姩妗嗛€夊尯鍩?, icon: icons.select },
+  { tool: 'pan', label: '拖拽', title: '拖拽画布进行平移', icon: icons.pan },
+  { tool: 'brush', label: '画笔', title: '按住拖动连续上色', icon: icons.brush },
+  { tool: 'eraser', label: '橡皮', title: '按住拖动连续擦除', icon: icons.eraser },
+  { tool: 'picker', label: '取色', title: '从画布取色', icon: icons.picker },
+  { tool: 'fill', label: '填充', title: '填充相邻同色区域', icon: icons.fill },
+  { tool: 'line', label: '直线', title: '点击起点，再点击终点', icon: icons.line },
+  { tool: 'rect', label: '矩形', title: '点击起点，再点击对角点', icon: icons.rect },
+  { tool: 'select', label: '选区', title: '拖动框选区域', icon: icons.select },
 ];
 
 const toolDescriptions: Record<ManualEditTool, string> = {
-  pan: '鎷栨嫿鐢诲竷杩涜骞崇Щ銆?,
-  brush: '鎸変綇鐢诲竷杩炵画涓婅壊銆?,
-  eraser: '鎸変綇鐢诲竷杩炵画鎿﹂櫎銆?,
-  picker: '鐐瑰嚮鐢诲竷鍚稿彇棰滆壊銆?,
-  fill: '鐐瑰嚮鑹插潡濉厖鐩搁偦鍚岃壊鍖哄煙銆?,
-  line: '鐐瑰嚮璧风偣锛屽啀鐐瑰嚮缁堢偣鐢熸垚鐩寸嚎銆?,
-  rect: '鐐瑰嚮璧风偣锛屽啀鐐瑰嚮瀵硅鐐圭敓鎴愮煩褰€?,
-  select: '鎷栧姩鐢诲嚭閫夊尯锛岄殢鍚庡彲浠ュ鍒躲€佸壀鍒囥€佸垹闄ゆ垨绉诲姩銆?,
-  move: '浠庨€夊尯鍐呴儴鎷栧姩绉诲姩鍐呭銆?,
-  paste: '鐐瑰嚮鐢诲竷绮樿创鍓创鏉垮唴瀹广€?,
+  pan: '拖拽画布进行平移。',
+  brush: '按住画布连续上色。',
+  eraser: '按住画布连续擦除。',
+  picker: '点击画布吸取颜色。',
+  fill: '点击色块填充相邻同色区域。',
+  line: '点击起点，再点击终点生成直线。',
+  rect: '点击起点，再点击对角点生成矩形。',
+  select: '拖动画出选区，随后可以复制、剪切、删除或移动。',
+  move: '从选区内部拖动移动内容。',
+  paste: '点击画布粘贴剪贴板内容。',
 };
 
 function ToolButton({
@@ -285,15 +285,25 @@ function CommandButton({
 export default function ManualEditDock({
   activeTool,
   onToolChange,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   brushSize,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onBrushSizeChange,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   layers,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   activeLayerId,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onLayerSelect,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onAddLayer,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onDuplicateLayer,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onDeleteLayer,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onToggleLayerVisibility,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onToggleLayerLock,
   selectedColor,
   selectedColorSystem,
@@ -322,15 +332,14 @@ export default function ManualEditDock({
 }: ManualEditDockProps) {
   const paletteColors = showFullPalette ? fullPaletteColors : currentGridColors;
   const currentLabel = activeTool === 'eraser'
-    ? '姗＄毊'
+    ? '橡皮'
     : selectedColor
       ? getColorKeyByHex(selectedColor.color, selectedColorSystem)
-      : '鏈€夎壊';
-  const activeToolLabel = tools.find(item => item.tool === activeTool)?.label || (activeTool === 'move' ? '绉诲姩' : activeTool === 'paste' ? '绮樿创' : '宸ュ叿');
+      : '未选色';
+  const activeToolLabel = tools.find(item => item.tool === activeTool)?.label || (activeTool === 'move' ? '移动' : activeTool === 'paste' ? '粘贴' : '工具');
   const selectionSize = activeSelection
     ? `${Math.abs(activeSelection.endCol - activeSelection.startCol) + 1}x${Math.abs(activeSelection.endRow - activeSelection.startRow) + 1}`
     : null;
-  const brushSizeOptions = [1, 2, 3, 5];
 
   return (
     <>
@@ -339,8 +348,8 @@ export default function ManualEditDock({
           type="button"
           onClick={onToggleFullPalette}
           className="grid h-[54px] w-11 place-items-center rounded-xl border border-white/15 bg-white/10 text-white transition-colors hover:bg-white/15"
-          title="鍒囨崲鑹叉澘"
-          aria-label="鍒囨崲鑹叉澘"
+          title="切换色板"
+          aria-label="切换色板"
         >
           <span
             className="h-7 w-7 rounded-lg border-2 border-white/70 shadow-inner"
@@ -364,52 +373,28 @@ export default function ManualEditDock({
 
         <div className="my-1 h-px w-8 bg-white/15" />
 
-        <ToolButton active={isMagnifierActive} icon={icons.zoom} label="鏀惧ぇ闀? title="鏀惧ぇ闀? onClick={onToggleMagnifier} />
-        <ToolButton icon={icons.close} label="閫€鍑虹紪杈? title="閫€鍑虹紪杈? onClick={onExitManualMode} />
+        <ToolButton active={isMagnifierActive} icon={icons.zoom} label="放大镜" title="放大镜" onClick={onToggleMagnifier} />
+        <ToolButton icon={icons.close} label="退出编辑" title="退出编辑" onClick={onExitManualMode} />
       </aside>
 
       <aside className="fixed right-3 top-[104px] z-[60] hidden max-h-[calc(100vh-128px)] w-[316px] overflow-y-auto rounded-2xl border border-white/60 bg-white/72 p-3 shadow-2xl backdrop-blur-2xl xl:block dark:border-white/10 dark:bg-gray-900/74">
         <section className="rounded-xl bg-white/60 p-4 dark:bg-white/5">
           <div className="mb-3 flex items-center gap-2">
             <span className="text-gray-500">{icons.brush}</span>
-            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">宸ュ叿</h2>
+            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">工具</h2>
           </div>
           <p className="text-lg font-semibold text-gray-800 dark:text-gray-100">{activeToolLabel}</p>
           <p className="mt-2 min-h-10 text-sm leading-5 text-gray-500 dark:text-gray-400">{toolDescriptions[activeTool]}</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <CommandButton icon={icons.undo} disabled={!canUndo} onClick={onUndo}>鎾ゅ洖</CommandButton>
-            <CommandButton icon={icons.move} disabled={!activeSelection} onClick={() => onToolChange('move')}>绉诲姩</CommandButton>
+            <CommandButton icon={icons.undo} disabled={!canUndo} onClick={onUndo}>撤回</CommandButton>
+            <CommandButton icon={icons.move} disabled={!activeSelection} onClick={() => onToolChange('move')}>移动</CommandButton>
           </div>
-          {(activeTool === 'brush' || activeTool === 'eraser') && (
-            <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                <span>绗斿埛澶у皬</span>
-                <span>{brushSize}x{brushSize}</span>
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                {brushSizeOptions.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => onBrushSizeChange(size)}
-                    className={`min-h-9 rounded-lg border text-xs font-semibold transition-colors ${
-                      brushSize === size
-                        ? 'border-[#d97757] bg-[#d97757] text-white shadow-sm'
-                        : 'border-gray-200 bg-white/70 text-gray-700 hover:bg-white dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10'
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
 
         <section className="mt-3 rounded-xl bg-white/60 p-4 dark:bg-white/5">
           <div className="mb-3 flex items-center gap-2">
             <span className="text-gray-500">{icons.palette}</span>
-            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">鑹叉澘</h2>
+            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">色板</h2>
           </div>
           <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
             <button
@@ -419,7 +404,7 @@ export default function ManualEditDock({
               }}
               className={`rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${!showFullPalette ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 dark:text-gray-300'}`}
             >
-              褰撳墠鑹插潡
+              当前色块
             </button>
             <button
               type="button"
@@ -428,12 +413,12 @@ export default function ManualEditDock({
               }}
               className={`rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${showFullPalette ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 dark:text-gray-300'}`}
             >
-              瀹屾暣鑹茬洏
+              完整色盘
             </button>
           </div>
           <div className="mb-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-            <span>褰撳墠 {currentGridColors.length} 鑹?/span>
-            <span>鎸夎壊鐩告帓鍒?/span>
+            <span>当前 {currentGridColors.length} 色</span>
+            <span>按色相排列</span>
           </div>
           <div className="grid max-h-52 grid-cols-5 gap-2 overflow-y-auto pr-1">
             <button
@@ -442,8 +427,8 @@ export default function ManualEditDock({
               className={`grid aspect-square place-items-center rounded-xl border-2 bg-white text-gray-500 transition-transform active:scale-95 ${
                 activeTool === 'eraser' ? 'border-[#d97757] ring-2 ring-[#d97757]/30' : 'border-gray-200 dark:border-gray-700'
               }`}
-              title="姗＄毊"
-              aria-label="閫夋嫨姗＄毊"
+              title="橡皮"
+              aria-label="选择橡皮"
             >
               {icons.eraser}
             </button>
@@ -460,7 +445,7 @@ export default function ManualEditDock({
                   }`}
                   style={{ backgroundColor: colorData.color }}
                   title={`${displayKey} (${colorData.color})`}
-                  aria-label={`閫夋嫨 ${displayKey}`}
+                  aria-label={`选择 ${displayKey}`}
                 >
                   <span className="rounded bg-white/78 px-1 text-gray-800 shadow-sm dark:bg-gray-950/70 dark:text-gray-100">{displayKey}</span>
                 </button>
@@ -470,23 +455,23 @@ export default function ManualEditDock({
         </section>
 
         <CommandButton icon={icons.resize} onClick={onCanvasTools}>
-          鐢诲竷灏哄
+          画布尺寸
         </CommandButton>
 
         {activeSelection && (
           <section className="mt-3 rounded-xl bg-white/60 p-4 dark:bg-white/5">
-            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">閫夊尯 {selectionSize}</h2>
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">选区 {selectionSize}</h2>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <CommandButton icon={icons.copy} onClick={onCopySelection}>澶嶅埗</CommandButton>
-              <CommandButton icon={icons.cut} onClick={onCutSelection}>鍓垏</CommandButton>
-              <CommandButton icon={icons.paste} disabled={!hasClipboard} onClick={onPasteAtSelection}>绮樿创</CommandButton>
-              <CommandButton icon={icons.trash} tone="danger" onClick={onDeleteSelection}>鍒犻櫎</CommandButton>
+              <CommandButton icon={icons.copy} onClick={onCopySelection}>复制</CommandButton>
+              <CommandButton icon={icons.cut} onClick={onCutSelection}>剪切</CommandButton>
+              <CommandButton icon={icons.paste} disabled={!hasClipboard} onClick={onPasteAtSelection}>粘贴</CommandButton>
+              <CommandButton icon={icons.trash} tone="danger" onClick={onDeleteSelection}>删除</CommandButton>
               <button
                 type="button"
                 onClick={onClearSelection}
                 className="col-span-2 min-h-10 rounded-xl border border-gray-200 bg-white/75 px-3 text-xs font-semibold text-gray-700 transition-colors hover:bg-white dark:border-gray-700 dark:bg-white/5 dark:text-gray-200"
               >
-                鍙栨秷閫夊尯
+                取消选区
               </button>
             </div>
           </section>
@@ -498,94 +483,19 @@ export default function ManualEditDock({
               <span className="text-gray-500">{icons.layers}</span>
               <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">图层</h2>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={onAddLayer}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-gray-200 bg-white text-base font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
-                title="新增图层"
-                aria-label="新增图层"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                onClick={onDuplicateLayer}
-                disabled={!activeLayerId}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-35 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
-                title="复制当前图层"
-                aria-label="复制当前图层"
-              >
-                ⧉
-              </button>
-            </div>
+            <span className="text-xs text-gray-400">1</span>
           </div>
-          <div className="mt-3 space-y-2">
-            {layers.slice().reverse().map((layer) => {
-              const isActive = layer.id === activeLayerId;
-              return (
-                <div
-                  key={layer.id}
-                  className={`rounded-xl border p-2 transition-colors ${
-                    isActive
-                      ? 'border-[#d97757] bg-[#fff3ee] dark:border-[#d97757] dark:bg-[#3a2119]'
-                      : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onLayerSelect(layer.id)}
-                    className="block w-full text-left"
-                    title={layer.name}
-                  >
-                    <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{layer.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                      {layer.visible ? '显示' : '隐藏'} · {layer.locked ? '已锁定' : '可编辑'}
-                    </p>
-                  </button>
-                  <div className="mt-2 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onToggleLayerVisibility(layer.id)}
-                      className="min-h-8 flex-1 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200"
-                      title={layer.visible ? '隐藏图层' : '显示图层'}
-                    >
-                      {layer.visible ? '眼' : '隐'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onToggleLayerLock(layer.id)}
-                      className="min-h-8 flex-1 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200"
-                      title={layer.locked ? '解锁图层' : '锁定图层'}
-                    >
-                      {layer.locked ? '锁' : '开'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteLayer(layer.id)}
-                      disabled={layers.length <= 1}
-                      className="min-h-8 flex-1 rounded-lg border border-red-200 bg-red-50 px-2 text-xs font-semibold text-red-600 disabled:opacity-35 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
-                      title="删除图层"
-                    >
-                      删
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {layers.length === 0 && (
-              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-                {projectName}
-              </div>
-            )}
+          <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
+            <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">主体</p>
+            <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{projectName}</p>
           </div>
         </section>
 
         <section className="mt-3 rounded-xl border border-emerald-200/70 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30">
-          <h2 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">鐢诲竷</h2>
+          <h2 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">画布</h2>
           <p className="mt-2 text-xs leading-6 text-emerald-800/80 dark:text-emerald-100/75">
-            缃戞牸 {gridDimensions ? `${gridDimensions.N}x${gridDimensions.M}` : '--'} 路 璞嗘暟 {totalBeadCount}
-            {manualShapeStart ? ` 路 璧风偣 ${manualShapeStart.col + 1},${manualShapeStart.row + 1}` : ''}
+            网格 {gridDimensions ? `${gridDimensions.N}x${gridDimensions.M}` : '--'} · 豆数 {totalBeadCount}
+            {manualShapeStart ? ` · 起点 ${manualShapeStart.col + 1},${manualShapeStart.row + 1}` : ''}
           </p>
         </section>
       </aside>
@@ -596,8 +506,8 @@ export default function ManualEditDock({
             type="button"
             onClick={onToggleFullPalette}
             className="grid h-11 min-w-14 place-items-center rounded-xl border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-            title="鍒囨崲鑹叉澘"
-            aria-label="鍒囨崲鑹叉澘"
+            title="切换色板"
+            aria-label="切换色板"
           >
             <span
               className="h-6 w-6 rounded-lg border border-gray-300"
@@ -627,31 +537,17 @@ export default function ManualEditDock({
             onClick={onUndo}
             disabled={!canUndo}
             className="grid h-11 min-w-11 place-items-center rounded-xl border border-gray-200 bg-gray-100 text-gray-600 disabled:opacity-35 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-            title="鎾ゅ洖"
-            aria-label="鎾ゅ洖"
+            title="撤回"
+            aria-label="撤回"
           >
             {icons.undo}
           </button>
-          {(activeTool === 'brush' || activeTool === 'eraser') && (
-            <button
-              type="button"
-              onClick={() => {
-                const index = brushSizeOptions.indexOf(brushSize);
-                onBrushSizeChange(brushSizeOptions[(index + 1) % brushSizeOptions.length]);
-              }}
-              className="grid h-11 min-w-14 place-items-center rounded-xl border border-gray-200 bg-gray-100 text-xs font-bold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-              title="鍒囨崲绗斿埛澶у皬"
-              aria-label="鍒囨崲绗斿埛澶у皬"
-            >
-              {brushSize}x
-            </button>
-          )}
           <button
             type="button"
             onClick={onExitManualMode}
             className="grid h-11 min-w-11 place-items-center rounded-xl bg-red-500 text-white"
-            title="閫€鍑虹紪杈?
-            aria-label="閫€鍑虹紪杈?
+            title="退出编辑"
+            aria-label="退出编辑"
           >
             {icons.close}
           </button>
@@ -668,7 +564,7 @@ export default function ManualEditDock({
                 className="h-8 min-w-10 rounded-lg border border-gray-200 text-[10px] font-bold text-gray-700 shadow-sm dark:border-gray-700 dark:text-gray-200"
                 style={{ backgroundColor: color === TRANSPARENT_KEY ? '#FFFFFF' : color }}
                 title={displayKey}
-                aria-label={`閫夋嫨 ${displayKey}`}
+                aria-label={`选择 ${displayKey}`}
               >
                 <span className="rounded bg-white/78 px-1 dark:bg-gray-900/72">{displayKey}</span>
               </button>
