@@ -1,6 +1,7 @@
 import { PixelationMode, MappedPixel } from '../utils/pixelation';
 import { GridDownloadOptions } from './downloadTypes';
 import { PaletteSelections } from '../utils/localStorageUtils';
+import { PixelLayer } from '../utils/layerUtils';
 
 export type SaveStatus = 'saved' | 'saving' | 'dirty' | 'error' | 'conflict' | 'offline';
 
@@ -15,6 +16,8 @@ export interface ProjectState {
   excludedColorKeys: string[];
   initialGridColorKeys: string[];
   mappedPixelData: MappedPixel[][] | null;
+  pixelLayers?: PixelLayer[];
+  activeLayerId?: string | null;
   gridDimensions: { N: number; M: number } | null;
   colorCounts: { [key: string]: { count: number; color: string } } | null;
   totalBeadCount: number;

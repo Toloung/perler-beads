@@ -1,0 +1,2 @@
+[permissions]
+allow = ["Bash(cd \"C:\\Users\\CC\\Desktop\\perler-beads\" && git remote -v)"]

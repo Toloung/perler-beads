@@ -32,8 +32,7 @@ const drawPixelatedCanvas = (
   dims: { N: number; M: number } | null,
   highlightColorKey?: string | null,
   isHighlighting?: boolean,
-  activeSelection?: GridSelection | null,
-  hoverCell?: { row: number; col: number } | null
+  activeSelection?: GridSelection | null
 ) => {
   if (!canvas || !dims || !dataToDraw) {
     console.warn("drawPixelatedCanvas: Missing required parameters");
@@ -121,18 +120,6 @@ const drawPixelatedCanvas = (
     pixelatedCtx.setLineDash([]);
   }
 
-  if (hoverCell) {
-    const { row, col } = hoverCell;
-    if (row >= 0 && row < M && col >= 0 && col < N) {
-      const x = col * cellWidthOutput;
-      const y = row * cellHeightOutput;
-      pixelatedCtx.fillStyle = 'rgba(217, 119, 87, 0.16)';
-      pixelatedCtx.fillRect(x, y, cellWidthOutput, cellHeightOutput);
-      pixelatedCtx.strokeStyle = '#D97757';
-      pixelatedCtx.lineWidth = Math.max(2, Math.min(cellWidthOutput, cellHeightOutput) * 0.12);
-      pixelatedCtx.strokeRect(x + 1, y + 1, Math.max(0, cellWidthOutput - 2), Math.max(0, cellHeightOutput - 2));
-    }
-  }
 };
 
 const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
@@ -157,6 +144,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const lastManualCellRef = useRef<{ row: number; col: number } | null>(null);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [hoverCell, setHoverCell] = useState<{ row: number; col: number } | null>(null);
+  const hoverCellRef = useRef<{ row: number; col: number } | null>(null);
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
   const baseDisplaySizeRef = useRef<{ width: number; height: number } | null>(null);
@@ -218,9 +206,9 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     // Ensure darkModeState is not null before drawing
     if (mappedPixelData && gridDimensions && canvasRef.current && darkModeState !== null) {
       console.log(`Redrawing canvas, dark mode: ${darkModeState}`); // Log redraw trigger
-      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting, activeSelection, isManualColoringMode ? hoverCell : null);
+      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting, activeSelection);
     }
-  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting, activeSelection, hoverCell, isManualColoringMode]); // Add darkModeState dependency
+  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting, activeSelection]); // Add darkModeState dependency
 
   const getCellFromPointer = (clientX: number, clientY: number) => {
     if (!canvasRef.current || !gridDimensions) return null;
@@ -234,6 +222,19 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
     if (row < 0 || col < 0 || row >= gridDimensions.M || col >= gridDimensions.N) return null;
     return { row, col };
+  };
+
+  const updateHoverCell = (cell: { row: number; col: number } | null) => {
+    const previous = hoverCellRef.current;
+    if (
+      previous?.row === cell?.row
+      && previous?.col === cell?.col
+    ) {
+      return;
+    }
+
+    hoverCellRef.current = cell;
+    setHoverCell(cell);
   };
 
   // Highlight effect.
@@ -287,7 +288,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     }
 
     if (isManualColoringMode) {
-      setHoverCell(getCellFromPointer(event.clientX, event.clientY));
+      updateHoverCell(getCellFromPointer(event.clientX, event.clientY));
     }
 
     if (isManualColoringMode && isMousePaintingRef.current && onManualPointerCell) {
@@ -312,7 +313,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const handleMouseLeave = () => {
     isMousePaintingRef.current = false;
     isPanningRef.current = false;
-    setHoverCell(null);
+    updateHoverCell(null);
     // Always hide the tooltip when leaving the canvas.
     onInteraction(0, 0, 0, 0, false, true);
   };
@@ -501,34 +502,63 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     touchMovedRef.current = false;
   };
 
+  const freeformCanvasStyle = isManualColoringMode
+    ? {
+        position: 'absolute' as const,
+        left: '50%',
+        top: '50%',
+        transform: `translate(calc(-50% + ${canvasOffset.x}px), calc(-50% + ${canvasOffset.y}px))`,
+      }
+    : {};
+
   return (
-    <canvas
-      ref={canvasRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-      onClick={handleClick}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-      onWheel={handleWheel}
-      className={`border border-gray-300 dark:border-gray-600 h-auto rounded block ${isManualColoringMode ? 'max-w-none' : 'max-w-full'} ${
-        isPanTool ? 'cursor-grab active:cursor-grabbing' : isManualColoringMode ? 'cursor-crosshair' : 'cursor-grab'
-      }`}
-      style={{
-        imageRendering: 'pixelated',
-        touchAction: isManualColoringMode ? 'none' : 'auto',
-        aspectRatio: canvasAspectRatio,
-        width: displaySize ? `${displaySize.width}px` : undefined,
-        height: 'auto',
-        position: isManualColoringMode ? 'absolute' : undefined,
-        left: isManualColoringMode ? '50%' : undefined,
-        top: isManualColoringMode ? '50%' : undefined,
-        transform: isManualColoringMode ? `translate(calc(-50% + ${canvasOffset.x}px), calc(-50% + ${canvasOffset.y}px))` : undefined,
-      }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        onWheel={handleWheel}
+        className={`border border-gray-300 dark:border-gray-600 h-auto rounded block ${isManualColoringMode ? 'max-w-none' : 'max-w-full'} ${
+          isPanTool ? 'cursor-grab active:cursor-grabbing' : isManualColoringMode ? 'cursor-crosshair' : 'cursor-grab'
+        }`}
+        style={{
+          imageRendering: 'pixelated',
+          touchAction: isManualColoringMode ? 'none' : 'auto',
+          aspectRatio: canvasAspectRatio,
+          width: displaySize ? `${displaySize.width}px` : undefined,
+          height: 'auto',
+          ...freeformCanvasStyle,
+        }}
+      />
+      {isManualColoringMode && hoverCell && gridDimensions && displaySize && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 z-[1]"
+          style={{
+            width: `${displaySize.width}px`,
+            height: `${displaySize.height}px`,
+            transform: `translate(calc(-50% + ${canvasOffset.x}px), calc(-50% + ${canvasOffset.y}px))`,
+          }}
+        >
+          <div
+            className="absolute border-2 border-[#d97757] bg-[#d97757]/20 shadow-[0_0_0_1px_rgba(255,255,255,0.75)]"
+            style={{
+              left: `${(hoverCell.col / gridDimensions.N) * 100}%`,
+              top: `${(hoverCell.row / gridDimensions.M) * 100}%`,
+              width: `${100 / gridDimensions.N}%`,
+              height: `${100 / gridDimensions.M}%`,
+            }}
+          />
+        </div>
+      )}
+    </>
   );
 };
 

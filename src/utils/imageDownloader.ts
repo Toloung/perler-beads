@@ -223,11 +223,28 @@ export async function downloadImage({
   activeBeadPalette: PaletteColor[];
   selectedColorSystem: ColorSystem;
 }): Promise<void> {
-  if (!mappedPixelData || !gridDimensions || gridDimensions.N === 0 || gridDimensions.M === 0 || activeBeadPalette.length === 0) {
+  const downloadTarget = options.downloadTarget || 'image';
+
+  if (!mappedPixelData || !gridDimensions || gridDimensions.N === 0 || gridDimensions.M === 0) {
     console.error("下载失败: 映射数据或尺寸无效。");
     alert("无法下载图纸，数据未生成或无效。");
     return;
   }
+  if (downloadTarget === 'csv') {
+    exportCsvData({
+      mappedPixelData,
+      gridDimensions,
+      selectedColorSystem
+    });
+    return;
+  }
+
+  if (activeBeadPalette.length === 0) {
+    console.error("下载失败: 色板数据无效。");
+    alert("无法下载图纸，色板数据未生成或无效。");
+    return;
+  }
+
   if (!colorCounts) {
     console.error("下载失败: 色号统计数据无效。");
     alert("无法下载图纸，色号统计数据未生成或无效。");
@@ -870,15 +887,6 @@ export async function downloadImage({
         document.body.removeChild(link);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         console.log("Grid image download initiated.");
-      
-      // 如果启用了CSV导出，同时导出CSV文件
-        if (options.exportCsv) {
-          exportCsvData({
-            mappedPixelData,
-            gridDimensions,
-            selectedColorSystem
-          });
-        }
       }, 'image/png');
     } catch (e) {
       console.error("下载图纸失败:", e);
