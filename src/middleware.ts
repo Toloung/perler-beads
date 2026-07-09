@@ -19,7 +19,7 @@ function isPublicPath(pathname: string): boolean {
     || pathname.startsWith('/icon-')
     || pathname === '/manifest.json'
     || pathname === '/sw.js'
-    || pathname === '/workbox-cb477421.js'
+    || pathname.startsWith('/workbox-')
   );
 }
 
