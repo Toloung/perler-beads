@@ -3854,9 +3854,13 @@ export default function Home() {
 
               {/* Canvas Preview Container */}
               {/* Apply dark mode styles */}
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+              <div className={
+                isManualColoringMode
+                  ? 'fixed inset-0 z-40 overflow-hidden bg-[radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.24)_1px,transparent_0)] [background-size:24px_24px] bg-[#f4f0ea] dark:bg-gray-950'
+                  : 'bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700'
+              }>
                 {/* 大画布提示信息 */}
-                {gridDimensions && gridDimensions.N > 100 && (
+                {!isManualColoringMode && gridDimensions && gridDimensions.N > 100 && (
                   <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-300 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3867,8 +3871,14 @@ export default function Home() {
                   </div>
                 )}
                  {/* Inner container background - 允许水平滚动以适应大画布 */}
-                <div className="flex justify-center mb-3 sm:mb-4 bg-gray-100 dark:bg-gray-700 p-2 rounded-lg overflow-x-auto overflow-y-hidden"
-                     style={{ minHeight: '150px' }}>
+                <div
+                  className={
+                    isManualColoringMode
+                      ? 'relative h-full w-full overflow-hidden'
+                      : 'flex justify-center mb-3 sm:mb-4 bg-gray-100 dark:bg-gray-700 p-2 rounded-lg overflow-x-auto overflow-y-hidden'
+                  }
+                  style={isManualColoringMode ? undefined : { minHeight: '150px' }}
+                >
                   {/* PixelatedPreviewCanvas component needs internal changes for dark mode drawing */}
                   <PixelatedPreviewCanvas
                     canvasRef={pixelatedCanvasRef}

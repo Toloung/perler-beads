@@ -153,11 +153,12 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const touchMovedRef = useRef<boolean>(false);
   const isMousePaintingRef = useRef(false);
   const isPanningRef = useRef(false);
-  const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const panStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const lastManualCellRef = useRef<{ row: number; col: number } | null>(null);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [hoverCell, setHoverCell] = useState<{ row: number; col: number } | null>(null);
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
   const baseDisplaySizeRef = useRef<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
@@ -178,6 +179,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       canvas.height = nextHeight;
     }
     baseDisplaySizeRef.current = { width: nextWidth, height: nextHeight };
+    setCanvasOffset({ x: 0, y: 0 });
     setDisplaySize((current) => (
       current?.width === nextWidth && current?.height === nextHeight
         ? current
@@ -248,16 +250,39 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     }
   }, [highlightColorKey, mappedPixelData, gridDimensions, onHighlightComplete]);
 
+  useEffect(() => {
+    if (!isManualColoringMode) return;
+
+    const handleGlobalMouseMove = (event: globalThis.MouseEvent) => {
+      if (!isPanTool || !isPanningRef.current || !panStartRef.current) return;
+      setCanvasOffset({
+        x: panStartRef.current.offsetX + event.clientX - panStartRef.current.x,
+        y: panStartRef.current.offsetY + event.clientY - panStartRef.current.y,
+      });
+    };
+
+    const handleGlobalMouseUp = () => {
+      isPanningRef.current = false;
+      panStartRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isManualColoringMode, isPanTool]);
+
   // --- Mouse events ---
   
   // Track hover, drag painting, and pan movement.
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
     if (isPanTool && isPanningRef.current && panStartRef.current) {
-      const scroller = canvasRef.current?.parentElement;
-      if (scroller) {
-        scroller.scrollLeft = panStartRef.current.scrollLeft - (event.clientX - panStartRef.current.x);
-        scroller.scrollTop = panStartRef.current.scrollTop - (event.clientY - panStartRef.current.y);
-      }
+      setCanvasOffset({
+        x: panStartRef.current.offsetX + event.clientX - panStartRef.current.x,
+        y: panStartRef.current.offsetY + event.clientY - panStartRef.current.y,
+      });
       return;
     }
 
@@ -294,13 +319,12 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
   const handleMouseDown = (event: MouseEvent<HTMLCanvasElement>) => {
     if (isPanTool) {
-      const scroller = canvasRef.current?.parentElement;
       isPanningRef.current = true;
       panStartRef.current = {
         x: event.clientX,
         y: event.clientY,
-        scrollLeft: scroller?.scrollLeft || 0,
-        scrollTop: scroller?.scrollTop || 0,
+        offsetX: canvasOffset.x,
+        offsetY: canvasOffset.y,
       };
       event.preventDefault();
       return;
@@ -348,9 +372,9 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     event.stopPropagation();
 
     const canvas = canvasRef.current;
-    const scroller = canvas.parentElement;
+    const stage = canvas.parentElement;
     const canvasRect = canvas.getBoundingClientRect();
-    const scrollerRect = scroller?.getBoundingClientRect();
+    const stageRect = stage?.getBoundingClientRect();
     const pointerOffsetX = event.clientX - canvasRect.left;
     const pointerOffsetY = event.clientY - canvasRect.top;
     const pointerRatioX = canvasRect.width > 0 ? pointerOffsetX / canvasRect.width : 0.5;
@@ -363,16 +387,21 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       };
       const currentSize = current || base;
       const zoomFactor = event.deltaY < 0 ? 1.12 : 0.88;
-      const minWidth = Math.max(220, base.width * 0.5);
-      const maxWidth = Math.min(5000, base.width * 5);
+      const minWidth = Math.max(40, base.width * 0.08);
+      const maxWidth = Math.min(200000, base.width * 240);
       const nextWidth = Math.round(Math.max(minWidth, Math.min(maxWidth, currentSize.width * zoomFactor)));
       const nextHeight = Math.round(nextWidth * (base.height / base.width));
 
-      if (scroller && scrollerRect) {
-        window.requestAnimationFrame(() => {
-          const nextRect = canvas.getBoundingClientRect();
-          scroller.scrollLeft = nextRect.left + pointerRatioX * nextRect.width - scrollerRect.left + scroller.scrollLeft - pointerOffsetX;
-          scroller.scrollTop = nextRect.top + pointerRatioY * nextRect.height - scrollerRect.top + scroller.scrollTop - pointerOffsetY;
+      if (stageRect) {
+        setCanvasOffset(() => {
+          const stageCenterX = stageRect.left + stageRect.width / 2;
+          const stageCenterY = stageRect.top + stageRect.height / 2;
+          const nextLeft = event.clientX - pointerRatioX * nextWidth;
+          const nextTop = event.clientY - pointerRatioY * nextHeight;
+          return {
+            x: nextLeft - stageCenterX + nextWidth / 2,
+            y: nextTop - stageCenterY + nextHeight / 2,
+          };
         });
       }
 
@@ -490,10 +519,14 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       }`}
       style={{
         imageRendering: 'pixelated',
-        touchAction: isManualColoringMode && continuousManualInput ? 'none' : 'auto',
+        touchAction: isManualColoringMode ? 'none' : 'auto',
         aspectRatio: canvasAspectRatio,
         width: displaySize ? `${displaySize.width}px` : undefined,
         height: 'auto',
+        position: isManualColoringMode ? 'absolute' : undefined,
+        left: isManualColoringMode ? '50%' : undefined,
+        top: isManualColoringMode ? '50%' : undefined,
+        transform: isManualColoringMode ? `translate(calc(-50% + ${canvasOffset.x}px), calc(-50% + ${canvasOffset.y}px))` : undefined,
       }}
     />
   );
