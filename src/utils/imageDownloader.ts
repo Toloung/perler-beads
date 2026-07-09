@@ -1,4 +1,4 @@
-import { GridDownloadOptions } from '../types/downloadTypes';
+import { DEFAULT_DOWNLOAD_OUTPUT_SCALE, GridDownloadOptions } from '../types/downloadTypes';
 import { MappedPixel, PaletteColor } from './pixelation';
 import { getDisplayColorKey, getColorKeyByHex, ColorSystem } from './colorSystemUtils';
 
@@ -44,6 +44,11 @@ function sortColorKeys(a: string, b: string): number {
   }
   // Fallback for keys that don't match the standard pattern (e.g., T1, ZG1)
   return a.localeCompare(b);
+}
+
+function getOutputScale(value?: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_DOWNLOAD_OUTPUT_SCALE;
+  return Math.min(3, Math.max(1, Math.round(value || DEFAULT_DOWNLOAD_OUTPUT_SCALE)));
 }
 
 // 导出CSV hex数据的函数
@@ -236,7 +241,8 @@ export async function downloadImage({
   // 主要下载处理函数
   const processDownload = () => {
     const { N, M } = gridDimensions; // 此时已确保gridDimensions不为null
-    const downloadCellSize = 30;
+    const outputScale = getOutputScale(options.outputScale);
+    const downloadCellSize = 30 * outputScale;
   
     // 从下载选项中获取设置
     const {
@@ -460,6 +466,9 @@ export async function downloadImage({
   
     console.log(`Generating download grid image: ${downloadWidth}x${downloadHeight}`);
     const fontSize = Math.max(8, Math.floor(downloadCellSize * 0.4));
+    const fineLineWidth = Math.max(1, outputScale);
+    const cellBorderWidth = Math.max(0.75, outputScale * 0.6);
+    const majorGridLineWidth = Math.max(1.5, outputScale * 1.25);
     
     // 如果需要，先绘制坐标轴和网格背景
     if (showCoordinates) {
@@ -530,7 +539,7 @@ export async function downloadImage({
       
       // 绘制坐标轴边框
       ctx.strokeStyle = '#AAAAAA';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = fineLineWidth;
       // 顶部横轴底边
       ctx.beginPath();
       ctx.moveTo(extraLeftMargin + axisLabelSize, titleBarHeight + extraTopMargin + axisLabelSize);
@@ -591,7 +600,7 @@ export async function downloadImage({
 
         // 绘制所有单元格的边框
         ctx.strokeStyle = '#DDDDDD'; // 浅色线条作为基础网格
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = cellBorderWidth;
         ctx.strokeRect(drawX + 0.5, drawY + 0.5, downloadCellSize, downloadCellSize);
       }
     }
@@ -599,7 +608,7 @@ export async function downloadImage({
     // 如果需要，绘制分隔网格线
     if (showGrid) {
       ctx.strokeStyle = gridLineColor; // 使用用户选择的颜色
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = majorGridLineWidth;
       
       // 绘制垂直分隔线 - 在单元格之间而不是边框上
       for (let i = gridInterval; i < N; i += gridInterval) {
@@ -622,7 +631,7 @@ export async function downloadImage({
 
     // 绘制整个网格区域的主边框
     ctx.strokeStyle = '#000000'; // 黑色边框
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = majorGridLineWidth;
     ctx.strokeRect(
       extraLeftMargin + axisLabelSize + 0.5, 
       titleBarHeight + extraTopMargin + axisLabelSize + 0.5, 
@@ -801,7 +810,7 @@ export async function downloadImage({
         ctx.fill();
 
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = fineLineWidth;
         ctx.stroke();
 
         ctx.fillStyle = '#64748B';
@@ -843,25 +852,34 @@ export async function downloadImage({
     }
 
     try {
-      const dataURL = downloadCanvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = showCellNumbers
-        ? `bead-grid-${N}x${M}-keys-palette_${selectedColorSystem}.png`
-        : `bead-grid-${N}x${M}-pixel-palette_${selectedColorSystem}.png`;
-      link.href = dataURL;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      console.log("Grid image download initiated.");
+      const fileName = showCellNumbers
+        ? `bead-grid-${N}x${M}-${outputScale}x-keys-palette_${selectedColorSystem}.png`
+        : `bead-grid-${N}x${M}-${outputScale}x-pixel-palette_${selectedColorSystem}.png`;
+      downloadCanvas.toBlob((blob) => {
+        if (!blob) {
+          alert("无法生成高清 PNG，请降低导出画质后重试。");
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        console.log("Grid image download initiated.");
       
       // 如果启用了CSV导出，同时导出CSV文件
-      if (options.exportCsv) {
-        exportCsvData({
-          mappedPixelData,
-          gridDimensions,
-          selectedColorSystem
-        });
-      }
+        if (options.exportCsv) {
+          exportCsvData({
+            mappedPixelData,
+            gridDimensions,
+            selectedColorSystem
+          });
+        }
+      }, 'image/png');
     } catch (e) {
       console.error("下载图纸失败:", e);
       alert("无法生成图纸下载链接。");

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { GridDownloadOptions } from '../types/downloadTypes';
+import { DEFAULT_DOWNLOAD_OUTPUT_SCALE, GridDownloadOptions, downloadOutputScaleOptions } from '../types/downloadTypes';
 
 const gridLineColorOptions = [
   { name: '深灰色', value: '#555555' },
@@ -69,6 +69,33 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
           </div>
 
           <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
+                导出画质
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {downloadOutputScaleOptions.map((quality) => (
+                  <button
+                    key={quality.value}
+                    type="button"
+                    onClick={() => handleOptionChange('outputScale', quality.value)}
+                    className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                      (tempOptions.outputScale ?? DEFAULT_DOWNLOAD_OUTPUT_SCALE) === quality.value
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200'
+                        : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                    title={quality.description}
+                  >
+                    <span className="block text-sm font-semibold">{quality.label}</span>
+                    <span className="block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{quality.value}x</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                高清会生成更大的 PNG，色号文字、网格和打印边缘会更清楚。
+              </p>
+            </div>
+
             <div className="flex items-center justify-between">
               <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
                 显示网格线

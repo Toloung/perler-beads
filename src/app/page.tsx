@@ -20,7 +20,7 @@ import {
 import { calculateJettPixelGrid, isJettMode } from '../utils/jettPixelation';
 
 // 导入新的类型和组件
-import { GridDownloadOptions } from '../types/downloadTypes';
+import { DEFAULT_DOWNLOAD_OUTPUT_SCALE, GridDownloadOptions } from '../types/downloadTypes';
 import DownloadSettingsModal, { gridLineColorOptions } from '../components/DownloadSettingsModal';
 import { downloadImage, importCsvData } from '../utils/imageDownloader';
 
@@ -191,6 +191,7 @@ export default function Home() {
     gridLineColor: gridLineColorOptions[0].value,
     includeStats: true, // 默认包含统计信息
     exportCsv: false, // 默认不导出CSV
+    outputScale: DEFAULT_DOWNLOAD_OUTPUT_SCALE,
     watermarkEnabled: true,
     watermarkText: '@拼豆',
     watermarkStyle: 'tile'

@@ -1,101 +1,132 @@
-<div align="center">
+# 拼豆底稿生成器
 
-# ✦ Perler Beads Generator ✦
+一个面向个人自用的拼豆图纸工作台。它把图片转换成拼豆底稿，支持手动编辑、云端保存、跨设备同步、版本历史和服务器备份。当前版本已经从原来的公开分享/社区方向调整为私有工作流：电脑和手机访问同一个服务器地址，登录后查看、编辑、保存同一批项目。
 
-### 任意图片 → 拼豆底稿，一键生成
+> 说明：本项目不接入社区画廊、公开作品列表或社交发布功能。
 
-[![Mobile](https://img.shields.io/badge/移动端-perlerbeadsold.zippland.com-ff69b4?style=for-the-badge)](https://perlerbeadsold.zippland.com)
-[![Desktop](https://img.shields.io/badge/桌面端-perlerbeads.zippland.com-8b5cf6?style=for-the-badge)](https://perlerbeads.zippland.com)
-[![License](https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge)](./LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](https://github.com/Zippland/perler-beads/pulls)
+## 当前能力
 
-开源的智能拼豆图纸生成器 — 自动颜色映射 · 多品牌色号适配 · 杂色清理 · 一键导出图纸与采购清单
+- 图片转拼豆底稿：支持 Jett Cartoon、Jett Realistic、主导色、均值等处理模式，默认优先使用 Jett Cartoon。
+- 多色号系统：内置 MARD、COCO、漫漫、盼盼、咪小窝等色号映射。
+- 自定义色板：可以选择预设色板，也可以手动调整可用颜色。
+- 手动编辑：包含拖拽、画笔、橡皮、取色、填充、直线、矩形、选区、移动、粘贴、放大镜等工具。
+- 画布工具：支持调整画布尺寸、复制/剪切/删除/粘贴选区。
+- 云端项目：项目保存到服务器 SQLite，手机和电脑可打开同一项目继续编辑。
+- 实时同步：服务器提供项目事件流，其他设备保存后，当前设备可自动拉取新版本；轮询保留为兜底。
+- 版本历史：每次创建、保存、重命名、恢复、删除都会留下版本快照，可从历史中恢复为新版本。
+- 服务器备份：支持自动每日备份和手动创建数据库备份。
+- 分享码：支持公开分享码和密码加密分享码，适合自己跨设备迁移或临时发给别人导入副本。
+- 作品打卡图：预览页可生成打卡图，支持不同样式和自定义照片。
+- 下载图纸：支持标准、高清、印刷三档 PNG 导出，可包含网格、坐标、色号标注、用量统计和 CSV 源数据。
+- 私有登录：通过 `PERLER_APP_PASSWORD` 设置访问密码。
 
-**移动端**（竖屏）：快速生成图纸，适合手机使用 · **桌面端**（横屏）：完整工作台，适合电脑精细编辑
+## 技术栈
 
-</div>
+| 部分 | 技术 |
+| --- | --- |
+| 框架 | Next.js 15 / React 19 / TypeScript |
+| 样式 | Tailwind CSS |
+| 图像处理 | Browser Canvas API |
+| 服务端存储 | SQLite / better-sqlite3 |
+| 同步 | Server-Sent Events + 轮询兜底 |
+| 部署 | Node.js / PM2 / Nginx |
 
----
-
-## 功能
-
-- **智能像素化** — 基于主导色提取的像素化算法，消除传统均值池化导致的灰色毛边
-- **多色板适配** — 内置 5 大品牌色号体系（MARD / COCO / 漫漫 / 盼盼 / 咪小窝），支持 168 / 144 / 96 等多种色板规格
-- **自动颜色合并** — BFS 连通区域检测 + 可调相似度阈值，自动清理杂色
-- **背景智能移除** — 边界洪水填充算法自动识别并剥离外部背景
-- **颜色排除与重映射** — 一键排除不想要的颜色，自动重映射到最近似可用色
-- **手动精修** — 支持对单个像素格进行手动着色和修改
-- **导出图纸** — 下载带色号标注和网格线的 PNG 图纸，可直接打印使用
-- **导出采购清单** — 自动统计各颜色用量，生成采购清单图
-
-## 快速开始
+## 本地运行
 
 ```bash
-git clone https://github.com/Zippland/perler-beads.git
-cd perler-beads
 npm install
 npm run dev
 ```
 
-浏览器打开 `http://localhost:3000`。
+默认访问：
 
-## 技术栈
+```text
+http://localhost:3000
+```
 
-| 层 | 技术 |
-|---|------|
-| 框架 | Next.js (React) + TypeScript |
-| 样式 | Tailwind CSS |
-| 图像处理 | Canvas API（浏览器端） |
-| 部署 | Vercel |
+如果需要测试登录保护：
 
-## 核心算法
+```bash
+PERLER_APP_PASSWORD='your-password' npm run dev
+```
 
-### 1. 初始颜色映射
+## 生产部署
 
-对每个网格单元，提取原图对应区域内出现频率最高的像素 RGB 值（主导色），通过欧氏距离映射到当前色板中最接近的颜色。相比均值池化，主导色提取有效避免了色块边界处的灰色毛边问题。
+推荐使用 Node.js + PM2 运行，并由 Nginx 做反向代理。
 
-### 2. 区域颜色合并
+```bash
+npm install
+npm run build
+PORT=3000 PERLER_DATA_DIR=/data/perler PERLER_APP_PASSWORD='change-this-password' npm run start -- -p 3000
+```
 
-使用 BFS 从未访问单元格出发，将欧氏距离小于阈值的邻近单元格聚合为连通区域，统一设置为区域内出现次数最多的色号。该步骤显著减少杂色，提升色块纯净度。
+PM2 示例：
 
-### 3. 背景移除
+```bash
+PORT=3000 PERLER_DATA_DIR=/data/perler PERLER_APP_PASSWORD='change-this-password' pm2 start npm --name perler-beads -- run start -- -p 3000
+pm2 save
+```
 
-定义背景色号列表，从所有边界单元格执行洪水填充，标记与边界连通且属于背景色的单元格为"外部"。统计和导出时忽略外部单元格，实现自动背景剥离。
+数据目录示例：
 
-### 4. 颜色排除与重映射
+```text
+/data/perler
+├── perler.db
+├── perler.db-shm
+├── perler.db-wal
+├── backups/
+└── uploads/
+```
 
-当用户排除某颜色时，在当前存在且未被排除的颜色子集中寻找最近似替代色进行重映射。恢复颜色时触发完整的重处理流程。
+## 环境变量
 
-### 调色板数据
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `PORT` | 否 | Next.js 监听端口 |
+| `PERLER_DATA_DIR` | 否 | SQLite、备份和上传目录，默认是项目内 `data/perler` |
+| `PERLER_APP_PASSWORD` | 建议 | 登录密码；部署到公网时必须设置 |
 
-色板数据定义在 [`src/app/colorSystemMapping.json`](src/app/colorSystemMapping.json)，包含 291 种标准颜色到 5 个品牌色号体系的完整映射。色板组合在 [`src/app/page.tsx`](src/app/page.tsx) 的 `paletteOptions` 中配置。
+## 私有访问建议
 
-## Roadmap
+应用内已有密码登录，但公网部署时仍建议在 Nginx 层再加 Basic Auth 或只开放给可信网络访问。这个工具会处理图片和项目数据，不适合作为公开站点随便开放上传。
 
-- [ ] CIEDE2000 (Delta E) 颜色距离算法，替代 RGB 欧氏距离
-- [ ] Floyd-Steinberg 抖动，在有限色板下模拟更丰富的颜色过渡
-- [ ] Web Workers 后台计算，优化大图性能
-- [ ] 用户自定义调色板上传
-- [ ] 微信小程序版本
+## API 概览
 
-## 参与贡献
+- `GET /api/projects`：项目列表
+- `POST /api/projects`：创建项目
+- `GET /api/projects/:id`：项目详情
+- `PUT /api/projects/:id`：保存项目
+- `PATCH /api/projects/:id`：重命名项目
+- `DELETE /api/projects/:id`：删除项目
+- `GET /api/projects/events`：项目变更事件流
+- `GET /api/projects/:id/versions`：版本历史
+- `GET /api/projects/:id/versions/:version`：版本快照
+- `POST /api/projects/:id/versions/:version`：恢复版本
+- `GET /api/backups`：备份列表
+- `POST /api/backups`：创建数据库备份
 
-欢迎提交 Issue 和 Pull Request。
+## 备份策略
 
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/your-feature`)
-3. 提交更改 (`git commit -m 'Add some feature'`)
-4. 推送到分支 (`git push origin feature/your-feature`)
-5. 创建 Pull Request
+服务器启动数据库时会确保当天存在一个 `daily-YYYY-MM-DD-...db` 备份。你也可以在“历史与备份”弹窗中手动创建备份。建议额外用服务器定时任务把 `/data/perler` 复制到对象存储或另一台机器。
 
-## 共创声明
+## 已完成重点
 
-本项目永久开源，由维护者无偿运营 [perlerbeadsold.zippland.com](https://perlerbeadsold.zippland.com) 供所有拼豆爱好者免费使用。
+- 私有登录和服务器项目保存
+- 手机/电脑打开同一项目继续编辑
+- 实时同步事件流
+- 版本历史和恢复
+- 服务器数据库备份
+- Zippland 风格手动编辑工作台
+- 作品打卡图和分享码导入/导出
 
-我们公开全部算法细节和源代码，目的是推动拼豆工具生态的共同进步。欢迎所有人学习、使用、改进。
+## 后续计划
 
-**但请勿将本项目代码恶意抄袭后包装为闭源商业产品。** 这一行为违反开源协议，也伤害每一位贡献者的热情。使用本项目代码的衍生作品须遵守许可证条款，保留原始版权声明，并以相同协议开源。
+- 图层系统：照片层、贴纸层、水印层、锁定、透明度、上移下移。
+- 选区增强：拖拽实时预览、连续粘贴、选区变换。
+- 画笔增强：笔刷大小、绘制预览、更多笔刷形状。
+- 下载增强：下载前预览、打印版模板、更多排版样式。
+- 备份增强：备份下载、自动清理旧备份、恢复整库备份。
 
 ## 许可证
 
-[AGPL-3.0](./LICENSE) &copy; [Zippland](https://github.com/Zippland)
+本项目基于原开源项目继续改造，遵循仓库内 [LICENSE](./LICENSE)。
