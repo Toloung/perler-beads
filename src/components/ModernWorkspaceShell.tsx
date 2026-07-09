@@ -101,16 +101,16 @@ export default function ModernWorkspaceShell({
               <span className="text-[10px] text-gray-600 dark:text-gray-300">{selectedColorSystem}</span>
               <span className="text-[11px] font-semibold">{colorCount}</span>
             </button>
-            <button type="button" onClick={onOpenProjects} className="min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-3">
+            <button type="button" onClick={onOpenProjects} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
               我的项目
             </button>
             <button type="button" onClick={onUpload} className="min-h-10 rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-4">
               导入
             </button>
-            <button type="button" onClick={onDownload} disabled={!hasCanvas} className="min-h-10 rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-4">
+            <button type="button" onClick={onDownload} disabled={!hasCanvas} className="hidden min-h-10 rounded-xl bg-white/50 px-3 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-4">
               下载
             </button>
-            <button type="button" onClick={onSave} disabled={!hasCanvas || saveStatus === 'saving'} className="min-h-10 rounded-xl bg-[#d97757] px-3 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70 sm:min-h-[44px] sm:px-4">
+            <button type="button" onClick={onSave} disabled={!hasCanvas || saveStatus === 'saving'} className="hidden min-h-10 rounded-xl bg-[#d97757] px-3 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70 sm:block sm:min-h-[44px] sm:px-4">
               {saveStatus === 'saving' ? '保存中' : '保存'}
             </button>
             <button type="button" onClick={onShare} disabled={!hasCanvas} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">

@@ -153,6 +153,33 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const lastManualCellRef = useRef<{ row: number; col: number } | null>(null);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [hoverCell, setHoverCell] = useState<{ row: number; col: number } | null>(null);
+  const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !gridDimensions) return;
+
+    const { N, M } = gridDimensions;
+    const maxDimension = Math.max(N, M);
+    const longEdge = maxDimension > 100
+      ? Math.min(1200, Math.max(500, maxDimension * 6))
+      : 500;
+    const cellSize = longEdge / maxDimension;
+    const nextWidth = Math.max(1, Math.round(N * cellSize));
+    const nextHeight = Math.max(1, Math.round(M * cellSize));
+
+    if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+    }
+    setDisplaySize((current) => (
+      current?.width === nextWidth && current?.height === nextHeight
+        ? current
+        : { width: nextWidth, height: nextHeight }
+    ));
+  }, [canvasRef, gridDimensions]);
+
+  const canvasAspectRatio = gridDimensions ? `${gridDimensions.N} / ${gridDimensions.M}` : undefined;
 
   // Effect to detect dark mode changes and update state
   useEffect(() => {
@@ -397,7 +424,10 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       }`}
       style={{
         imageRendering: 'pixelated',
-        touchAction: isManualColoringMode && continuousManualInput ? 'none' : 'auto'
+        touchAction: isManualColoringMode && continuousManualInput ? 'none' : 'auto',
+        aspectRatio: canvasAspectRatio,
+        width: displaySize ? `${displaySize.width}px` : undefined,
+        height: 'auto',
       }}
     />
   );

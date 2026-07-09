@@ -3092,11 +3092,11 @@ export default function Home() {
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             </span>
           </button>
-          <div className="min-w-[9rem] flex-1">
+          <div className="min-w-0 flex-1 sm:min-w-[9rem]">
             <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">拼豆</p>
             <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">{currentProjectName}</p>
           </div>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 sm:gap-1.5">
+          <div className="flex min-w-0 basis-full flex-wrap items-center justify-start gap-1 sm:basis-auto sm:flex-1 sm:justify-end sm:gap-1.5">
             <button type="button" className="flex min-h-10 flex-col items-start rounded-xl bg-white/50 px-2 py-1 text-gray-700 transition-colors active:bg-white/70 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:min-h-[44px] sm:px-2.5" title={`色板设置 · ${selectedColorSystem} · ${totalBeadCount || 0} 颗`}>
               <span className="text-[10px] text-gray-600 dark:text-gray-300">{selectedColorSystem || 'MARD'}</span>
               <span className="text-[11px] font-semibold">{totalBeadCount || 0}</span>

@@ -51,8 +51,10 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
 }) => {
   // 计算初始位置，确保左边缘在屏幕内（小屏幕时右边缘可以超出）
   const getInitialPosition = () => ({
-    x: Math.max(0, Math.min(20, window.innerWidth - 280)), // 确保左边缘至少是0
-    y: Math.max(0, Math.min(100, window.innerHeight - 400)) // 确保上边缘至少是0
+    x: window.innerWidth >= 1024
+      ? Math.max(8, window.innerWidth - 360)
+      : Math.max(8, Math.min(20, window.innerWidth - 280)),
+    y: Math.max(96, Math.min(124, window.innerHeight - 400))
   });
   
   const [position, setPosition] = useState({ x: 20, y: 100 });
