@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const AUTH_COOKIE = 'perler_auth';
 
+function shouldUseSecureCookie(request: NextRequest): boolean {
+  return request.nextUrl.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https';
+}
+
 function authToken(password: string): string {
   return createHash('sha256').update(`perler:${password}`).digest('hex');
 }
@@ -31,21 +35,21 @@ export async function POST(request: NextRequest) {
     value: authToken(configuredPassword),
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookie(request),
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   });
   return response;
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
   response.cookies.set({
     name: AUTH_COOKIE,
     value: '',
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookie(request),
     path: '/',
     maxAge: 0,
   });
