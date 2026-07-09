@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteProject, getProject, renameProject, updateProject } from '../../../../lib/projectsDb';
+import { publishProjectEvent } from '../../../../lib/projectEvents';
 
 export const runtime = 'nodejs';
 
@@ -47,6 +48,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
+    publishProjectEvent({
+      type: 'updated',
+      projectId: result.project.id,
+      version: result.project.version,
+      name: result.project.name,
+      updated_at: result.project.updated_at,
+    });
+
     return NextResponse.json(result.project);
   } catch (error) {
     console.error('Failed to update project', error);
@@ -64,6 +73,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'PROJECT_NOT_FOUND' }, { status: 404 });
     }
 
+    publishProjectEvent({
+      type: 'renamed',
+      projectId: project.id,
+      version: project.version,
+      name: project.name,
+      updated_at: project.updated_at,
+    });
+
     return NextResponse.json(project);
   } catch (error) {
     console.error('Failed to rename project', error);
@@ -78,6 +95,14 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!deleted) {
     return NextResponse.json({ error: 'PROJECT_NOT_FOUND' }, { status: 404 });
   }
+
+  publishProjectEvent({
+    type: 'deleted',
+    projectId: deleted.id,
+    version: deleted.version,
+    name: deleted.name,
+    updated_at: deleted.updated_at,
+  });
 
   return NextResponse.json({ ok: true });
 }

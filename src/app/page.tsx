@@ -106,6 +106,7 @@ import GridTooltip from '../components/GridTooltip';
 import CustomPaletteEditor from '../components/CustomPaletteEditor';
 import FloatingColorPalette from '../components/FloatingColorPalette';
 import FloatingToolbar from '../components/FloatingToolbar';
+import HistoryBackupModal from '../components/HistoryBackupModal';
 import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import ManualEditDock from '../components/ManualEditDock';
@@ -127,14 +128,18 @@ import ModernWorkspaceShell from '../components/ModernWorkspaceShell';
 import { ConflictModal, ProjectListModal, ProjectToolbar } from '../components/ProjectManager';
 import PreviewCardModal from '../components/PreviewCardModal';
 import ShareCodeModal, { ShareGenerateOptions, SharePanel } from '../components/ShareCodeModal';
-import { ProjectDetail, ProjectState, ProjectSummary, SaveStatus, VersionConflict } from '../types/projectTypes';
+import { DatabaseBackupSummary, ProjectDetail, ProjectState, ProjectSummary, ProjectVersionSummary, SaveStatus, VersionConflict } from '../types/projectTypes';
 import {
+  createDatabaseBackupOnServer,
   createProjectOnServer,
   deleteProjectOnServer,
+  fetchDatabaseBackups,
   fetchProject,
+  fetchProjectVersions,
   fetchProjects,
   isVersionConflict,
   renameProjectOnServer,
+  restoreProjectVersionOnServer,
   updateProjectOnServer
 } from '../utils/projectApiClient';
 import { createShareCode, readShareCode } from '../utils/shareCode';
@@ -256,6 +261,10 @@ export default function Home() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState<boolean>(false);
   const [isProjectsLoading, setIsProjectsLoading] = useState<boolean>(false);
+  const [projectVersions, setProjectVersions] = useState<ProjectVersionSummary[]>([]);
+  const [databaseBackups, setDatabaseBackups] = useState<DatabaseBackupSummary[]>([]);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
   const [versionConflict, setVersionConflict] = useState<VersionConflict | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
@@ -883,6 +892,55 @@ export default function Home() {
     }
   }, [showToast]);
 
+  const refreshHistoryAndBackups = useCallback(async () => {
+    setIsHistoryLoading(true);
+    try {
+      const [versions, backups] = await Promise.all([
+        currentProjectId ? fetchProjectVersions(currentProjectId) : Promise.resolve([]),
+        fetchDatabaseBackups(),
+      ]);
+      setProjectVersions(versions);
+      setDatabaseBackups(backups);
+    } catch (error) {
+      console.error('加载历史与备份失败:', error);
+      showToast('加载历史与备份失败');
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [currentProjectId, showToast]);
+
+  const handleOpenHistory = useCallback(() => {
+    setIsHistoryModalOpen(true);
+    refreshHistoryAndBackups();
+  }, [refreshHistoryAndBackups]);
+
+  const handleRestoreVersion = useCallback(async (version: number) => {
+    if (!currentProjectId) return;
+    if (!window.confirm(`确定恢复到版本 ${version} 吗？当前状态会被保存为新的恢复版本。`)) return;
+
+    try {
+      const project = await restoreProjectVersionOnServer(currentProjectId, version);
+      applyProject(project);
+      refreshHistoryAndBackups();
+      refreshProjects();
+      showToast(`已恢复到版本 ${version}`);
+    } catch (error) {
+      console.error('恢复版本失败:', error);
+      showToast('恢复版本失败');
+    }
+  }, [applyProject, currentProjectId, refreshHistoryAndBackups, refreshProjects, showToast]);
+
+  const handleCreateBackup = useCallback(async () => {
+    try {
+      await createDatabaseBackupOnServer('manual');
+      setDatabaseBackups(await fetchDatabaseBackups());
+      showToast('服务器备份已创建');
+    } catch (error) {
+      console.error('创建备份失败:', error);
+      showToast('创建备份失败');
+    }
+  }, [showToast]);
+
   const persistProject = useCallback(async (options?: { saveAs?: boolean; force?: boolean }) => {
     if (!mappedPixelData || !gridDimensions) {
       showToast('请先生成拼豆图纸');
@@ -1215,6 +1273,83 @@ export default function Home() {
 
     return () => window.clearTimeout(timer);
   }, [hasUnsavedChanges, saveStatus, mappedPixelData, gridDimensions, persistProject]);
+
+  useEffect(() => {
+    if (!isMounted || typeof EventSource === 'undefined') {
+      return;
+    }
+
+    const source = new EventSource('/api/projects/events');
+    source.addEventListener('project', (message) => {
+      void (async () => {
+        try {
+          const event = JSON.parse((message as MessageEvent).data) as {
+            type: 'created' | 'updated' | 'renamed' | 'deleted' | 'restored';
+            projectId: string;
+            version: number;
+            name: string;
+            updated_at: string;
+          };
+
+          if (isProjectsModalOpen) {
+            refreshProjects();
+          }
+
+          if (event.projectId !== currentProjectId) {
+            return;
+          }
+
+          if (event.type === 'deleted') {
+            setVersionConflict({
+              error: 'VERSION_CONFLICT',
+              serverVersion: event.version,
+              clientVersion: currentProjectVersion,
+            });
+            setSaveStatus('conflict');
+            showToast('当前项目已在其他设备删除');
+            return;
+          }
+
+          if (event.version <= currentProjectVersion || saveStatus === 'saving') {
+            return;
+          }
+
+          if (hasUnsavedChanges || saveStatus === 'conflict') {
+            setVersionConflict({
+              error: 'VERSION_CONFLICT',
+              serverVersion: event.version,
+              clientVersion: currentProjectVersion,
+            });
+            setSaveStatus('conflict');
+            showToast('其他设备有新修改，请处理版本冲突');
+            return;
+          }
+
+          const project = await fetchProject(event.projectId);
+          applyProject(project);
+          showToast('已实时同步其他设备的修改');
+        } catch (error) {
+          console.warn('处理实时同步事件失败:', error);
+        }
+      })();
+    });
+
+    source.onerror = () => {
+      console.warn('实时同步连接暂时不可用，将保留轮询兜底');
+    };
+
+    return () => source.close();
+  }, [
+    applyProject,
+    currentProjectId,
+    currentProjectVersion,
+    hasUnsavedChanges,
+    isMounted,
+    isProjectsModalOpen,
+    refreshProjects,
+    saveStatus,
+    showToast,
+  ]);
 
   useEffect(() => {
     if (!currentProjectId || hasUnsavedChanges || saveStatus === 'saving' || saveStatus === 'conflict') {
@@ -3999,6 +4134,9 @@ export default function Home() {
               <button type="button" onClick={() => setIsCanvasToolsOpen(true)} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
                 画布工具
               </button>
+              <button type="button" onClick={handleOpenHistory} disabled={!currentProjectId} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
+                历史与备份
+              </button>
               <button type="button" onClick={() => openShareModal('import')} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
                 分享码导入/导出
               </button>
@@ -4223,6 +4361,18 @@ export default function Home() {
         totalBeadCount={totalBeadCount}
         projectName={currentProjectName}
         onClose={() => setIsPreviewModalOpen(false)}
+      />
+
+      <HistoryBackupModal
+        open={isHistoryModalOpen}
+        loading={isHistoryLoading}
+        versions={projectVersions}
+        backups={databaseBackups}
+        currentVersion={currentProjectVersion}
+        onClose={() => setIsHistoryModalOpen(false)}
+        onRefresh={refreshHistoryAndBackups}
+        onRestore={handleRestoreVersion}
+        onCreateBackup={handleCreateBackup}
       />
 
       <ImageEditorModal

@@ -1,4 +1,12 @@
-import { ProjectDetail, ProjectState, ProjectSummary, VersionConflict } from '../types/projectTypes';
+import {
+  DatabaseBackupSummary,
+  ProjectDetail,
+  ProjectState,
+  ProjectSummary,
+  ProjectVersionDetail,
+  ProjectVersionSummary,
+  VersionConflict,
+} from '../types/projectTypes';
 
 async function readJson<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -64,6 +72,38 @@ export async function deleteProjectOnServer(id: string): Promise<void> {
   await readJson<{ ok: true }>(
     await fetch(`/api/projects/${id}`, {
       method: 'DELETE',
+    })
+  );
+}
+
+export async function fetchProjectVersions(id: string): Promise<ProjectVersionSummary[]> {
+  const data = await readJson<{ versions: ProjectVersionSummary[] }>(await fetch(`/api/projects/${id}/versions`));
+  return data.versions;
+}
+
+export async function fetchProjectVersion(id: string, version: number): Promise<ProjectVersionDetail> {
+  return readJson<ProjectVersionDetail>(await fetch(`/api/projects/${id}/versions/${version}`));
+}
+
+export async function restoreProjectVersionOnServer(id: string, version: number): Promise<ProjectDetail> {
+  return readJson<ProjectDetail>(
+    await fetch(`/api/projects/${id}/versions/${version}`, {
+      method: 'POST',
+    })
+  );
+}
+
+export async function fetchDatabaseBackups(): Promise<DatabaseBackupSummary[]> {
+  const data = await readJson<{ backups: DatabaseBackupSummary[] }>(await fetch('/api/backups'));
+  return data.backups;
+}
+
+export async function createDatabaseBackupOnServer(label?: string): Promise<DatabaseBackupSummary> {
+  return readJson<DatabaseBackupSummary>(
+    await fetch('/api/backups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
     })
   );
 }

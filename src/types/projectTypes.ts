@@ -40,3 +40,25 @@ export interface VersionConflict {
   serverVersion: number;
   clientVersion: number;
 }
+
+export type ProjectVersionAction = 'create' | 'update' | 'rename' | 'restore' | 'delete';
+
+export interface ProjectVersionSummary {
+  project_id: string;
+  version: number;
+  name: string;
+  action: ProjectVersionAction;
+  created_at: string;
+}
+
+export interface ProjectVersionDetail extends ProjectVersionSummary {
+  thumbnail: string | null;
+  image_path: string | null;
+  state_json: ProjectState;
+}
+
+export interface DatabaseBackupSummary {
+  name: string;
+  size: number;
+  created_at: string;
+}
