@@ -44,6 +44,8 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
         ...options,
         downloadTarget: options.downloadTarget || 'image',
         outputScale: options.outputScale || DEFAULT_DOWNLOAD_OUTPUT_SCALE,
+        showCellNumbers: true,
+        watermarkEnabled: false,
       });
     }
   }, [isOpen, options]);
@@ -72,6 +74,8 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
     const nextOptions = {
       ...tempOptions,
       exportCsv: tempOptions.downloadTarget === 'csv',
+      showCellNumbers: true,
+      watermarkEnabled: false,
     };
     onOptionsChange(nextOptions);
     onDownload(nextOptions);
@@ -221,13 +225,6 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                     />
                   </OptionRow>
 
-                  <OptionRow label="隐藏格内色号">
-                    <Toggle
-                      checked={!tempOptions.showCellNumbers}
-                      onChange={(checked) => handleOptionChange('showCellNumbers', !checked)}
-                    />
-                  </OptionRow>
-
                   <OptionRow label="包含色号统计">
                     <Toggle
                       checked={tempOptions.includeStats}
@@ -235,55 +232,6 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                     />
                   </OptionRow>
 
-                  <section className="space-y-3 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
-                    <OptionRow
-                      label="添加水印"
-                      hint="下载图纸时显示来源标记"
-                    >
-                      <Toggle
-                        checked={tempOptions.watermarkEnabled}
-                        onChange={(checked) => handleOptionChange('watermarkEnabled', checked)}
-                      />
-                    </OptionRow>
-
-                    {tempOptions.watermarkEnabled && (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOptionChange('watermarkStyle', 'tile')}
-                            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                              tempOptions.watermarkStyle === 'tile'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-                            }`}
-                          >
-                            平铺
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOptionChange('watermarkStyle', 'emboss')}
-                            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                              tempOptions.watermarkStyle === 'emboss'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-                            }`}
-                          >
-                            浮雕
-                          </button>
-                        </div>
-
-                        <input
-                          type="text"
-                          value={tempOptions.watermarkText}
-                          onChange={(event) => handleOptionChange('watermarkText', event.target.value)}
-                          maxLength={40}
-                          placeholder="@拼豆"
-                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:ring-blue-900"
-                        />
-                      </>
-                    )}
-                  </section>
                 </>
               )}
             </div>
@@ -430,7 +378,7 @@ const DownloadPreview: React.FC<DownloadPreviewProps> = ({
         <div className="mt-3 overflow-hidden rounded-lg border border-blue-200 bg-white font-mono text-[10px] leading-5 text-gray-600 dark:border-blue-900 dark:bg-gray-950 dark:text-gray-300">
           {mappedPixelData.slice(0, 4).map((row, rowIndex) => (
             <div key={rowIndex} className="truncate px-2">
-              {row.slice(0, 8).map((cell) => (cell && !cell.isExternal ? cell.color : 'TRANSPARENT')).join(',')}
+              {row.slice(0, 8).map((cell) => (cell && !cell.isExternal ? cell.color : '__TRANSPARENT__')).join(',')}
               {gridDimensions.N > 8 ? ',...' : ''}
             </div>
           ))}

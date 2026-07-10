@@ -23,6 +23,20 @@ async function loadImage(src: string) {
   });
 }
 
+function centeredCropForRatio(imageRatio: number, targetRatio: number): CropState {
+  if (targetRatio <= 0 || imageRatio <= 0) {
+    return { x: 0, y: 0, width: 100, height: 100 };
+  }
+
+  if (imageRatio > targetRatio) {
+    const width = (targetRatio / imageRatio) * 100;
+    return { x: (100 - width) / 2, y: 0, width, height: 100 };
+  }
+
+  const height = (imageRatio / targetRatio) * 100;
+  return { x: 0, y: (100 - height) / 2, width: 100, height };
+}
+
 export default function ImageEditorModal({
   open,
   imageSrc,
@@ -39,6 +53,7 @@ export default function ImageEditorModal({
   const [flipHorizontal, setFlipHorizontal] = useState(false);
   const [flipVertical, setFlipVertical] = useState(false);
   const [crop, setCrop] = useState<CropState>({ x: 0, y: 0, width: 100, height: 100 });
+  const [imageRatio, setImageRatio] = useState(1);
   const [isApplying, setIsApplying] = useState(false);
 
   const renderEditedImage = async (targetCanvas?: HTMLCanvasElement) => {
@@ -82,6 +97,16 @@ export default function ImageEditorModal({
   useEffect(() => {
     if (!open || !imageSrc) return;
 
+    loadImage(imageSrc)
+      .then((image) => {
+        setImageRatio(image.width / image.height);
+      })
+      .catch(() => setImageRatio(1));
+  }, [open, imageSrc]);
+
+  useEffect(() => {
+    if (!open || !imageSrc) return;
+
     renderEditedImage(previewCanvasRef.current || undefined).catch(() => {
       // Preview failure is non-fatal; apply will surface the same issue.
     });
@@ -111,6 +136,14 @@ export default function ImageEditorModal({
     });
   };
 
+  const applyRatioCrop = (ratio: number | null) => {
+    if (!ratio) {
+      setCrop({ x: 0, y: 0, width: 100, height: 100 });
+      return;
+    }
+    setCrop(centeredCropForRatio(imageRatio, ratio));
+  };
+
   const handleApply = async () => {
     setIsApplying(true);
     try {
@@ -124,15 +157,18 @@ export default function ImageEditorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="grid max-h-[92vh] w-full max-w-4xl gap-4 overflow-y-auto rounded-lg bg-white p-4 shadow-2xl dark:bg-gray-800 md:grid-cols-[minmax(0,1fr)_280px]" onClick={(event) => event.stopPropagation()}>
-        <div className="flex min-h-[280px] items-center justify-center rounded-lg bg-gray-100 p-3 dark:bg-gray-900">
-          <canvas ref={previewCanvasRef} className="max-h-[65vh] max-w-full rounded-md shadow-sm" />
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 p-2 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+      <div className="grid max-h-[94vh] w-full max-w-4xl gap-4 overflow-y-auto rounded-2xl bg-white p-3 shadow-2xl dark:bg-gray-800 sm:p-4 md:grid-cols-[minmax(0,1fr)_300px]" onClick={(event) => event.stopPropagation()}>
+        <div className="flex min-h-[260px] items-center justify-center rounded-xl bg-gray-100 p-3 dark:bg-gray-900">
+          <canvas ref={previewCanvasRef} className="max-h-[62vh] max-w-full rounded-lg shadow-sm" />
         </div>
 
         <aside className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">编辑图片</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">编辑图片</h3>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">先裁切、旋转或翻转，再重新生成底稿。</p>
+            </div>
             <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">
               关闭
             </button>
@@ -141,23 +177,33 @@ export default function ImageEditorModal({
           <section className="space-y-2">
             <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">旋转 / 翻转</h4>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setRotation(prev => prev - 90)} className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-600">
-                左转 90°
+              <button type="button" onClick={() => setRotation(prev => prev - 90)} className="rounded-xl border border-gray-300 px-3 py-2 text-sm dark:border-gray-600">
+                左转 90
               </button>
-              <button type="button" onClick={() => setRotation(prev => prev + 90)} className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-600">
-                右转 90°
+              <button type="button" onClick={() => setRotation(prev => prev + 90)} className="rounded-xl border border-gray-300 px-3 py-2 text-sm dark:border-gray-600">
+                右转 90
               </button>
-              <button type="button" onClick={() => setFlipHorizontal(prev => !prev)} className={`rounded-md border px-3 py-2 text-sm ${flipHorizontal ? 'border-[#d97757] bg-[#d97757]/10 text-[#c4684a]' : 'border-gray-300 dark:border-gray-600'}`}>
+              <button type="button" onClick={() => setFlipHorizontal(prev => !prev)} className={`rounded-xl border px-3 py-2 text-sm ${flipHorizontal ? 'border-[#d97757] bg-[#d97757]/10 text-[#c4684a]' : 'border-gray-300 dark:border-gray-600'}`}>
                 水平翻转
               </button>
-              <button type="button" onClick={() => setFlipVertical(prev => !prev)} className={`rounded-md border px-3 py-2 text-sm ${flipVertical ? 'border-[#d97757] bg-[#d97757]/10 text-[#c4684a]' : 'border-gray-300 dark:border-gray-600'}`}>
+              <button type="button" onClick={() => setFlipVertical(prev => !prev)} className={`rounded-xl border px-3 py-2 text-sm ${flipVertical ? 'border-[#d97757] bg-[#d97757]/10 text-[#c4684a]' : 'border-gray-300 dark:border-gray-600'}`}>
                 垂直翻转
               </button>
             </div>
           </section>
 
           <section className="space-y-2">
-            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">裁剪百分比</h4>
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">快速裁切</h4>
+            <div className="grid grid-cols-4 gap-2">
+              <button type="button" onClick={() => applyRatioCrop(null)} className="rounded-xl border border-gray-300 px-2 py-2 text-xs dark:border-gray-600">原图</button>
+              <button type="button" onClick={() => applyRatioCrop(1)} className="rounded-xl border border-gray-300 px-2 py-2 text-xs dark:border-gray-600">1:1</button>
+              <button type="button" onClick={() => applyRatioCrop(4 / 3)} className="rounded-xl border border-gray-300 px-2 py-2 text-xs dark:border-gray-600">4:3</button>
+              <button type="button" onClick={() => applyRatioCrop(3 / 4)} className="rounded-xl border border-gray-300 px-2 py-2 text-xs dark:border-gray-600">3:4</button>
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">裁切百分比</h4>
             <div className="grid grid-cols-2 gap-2">
               {([
                 ['x', '左侧'],
@@ -171,23 +217,20 @@ export default function ImageEditorModal({
                     type="number"
                     min={0}
                     max={100}
-                    value={crop[key]}
+                    value={Math.round(crop[key] * 10) / 10}
                     onChange={(event) => setCropField(key, event.target.value)}
-                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                   />
                 </label>
               ))}
             </div>
-            <button type="button" onClick={() => setCrop({ x: 0, y: 0, width: 100, height: 100 })} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 dark:border-gray-600 dark:text-gray-200">
-              重置裁剪
-            </button>
           </section>
 
           <button
             type="button"
             disabled={isApplying}
             onClick={handleApply}
-            className="w-full rounded-md bg-[#d97757] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-xl bg-[#d97757] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isApplying ? '应用中...' : '应用到图纸'}
           </button>

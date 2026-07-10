@@ -181,6 +181,9 @@ export default function Home() {
   const [isManualColoringMode, setIsManualColoringMode] = useState<boolean>(false);
   const [manualEditTool, setManualEditTool] = useState<ManualEditTool>('brush');
   const [manualBrushSize, setManualBrushSize] = useState<number>(1);
+  const [manualMirrorX, setManualMirrorX] = useState<boolean>(false);
+  const [manualMirrorY, setManualMirrorY] = useState<boolean>(false);
+  const [manualRectFilled, setManualRectFilled] = useState<boolean>(false);
   const [manualShapeStart, setManualShapeStart] = useState<{ row: number; col: number } | null>(null);
   const [selectedColor, setSelectedColor] = useState<MappedPixel | null>(null);
   // 新增：一键擦除模式状态
@@ -201,7 +204,7 @@ export default function Home() {
     includeStats: true, // 默认包含统计信息
     exportCsv: false, // 默认不导出CSV
     outputScale: DEFAULT_DOWNLOAD_OUTPUT_SCALE,
-    watermarkEnabled: true,
+    watermarkEnabled: false,
     watermarkText: '@拼豆',
     watermarkStyle: 'tile'
   });
@@ -255,6 +258,7 @@ export default function Home() {
     totalBeadCount: number;
   }
   const [editHistory, setEditHistory] = useState<EditSnapshot[]>([]);
+  const [editFuture, setEditFuture] = useState<EditSnapshot[]>([]);
 
   // 新增：一键去背景撤回快照（单步）
   const [bgRemovalSnapshot, setBgRemovalSnapshot] = useState<EditSnapshot | null>(null);
@@ -338,11 +342,40 @@ export default function Home() {
       totalBeadCount,
     };
     setEditHistory(prev => [...prev.slice(-49), snapshot]);
+    setEditFuture([]);
   }, [activeLayerId, mappedPixelData, colorCounts, pixelLayers, totalBeadCount]);
+
+  const createCurrentEditSnapshot = useCallback((): EditSnapshot | null => {
+    if (!mappedPixelData || !colorCounts) return null;
+    return {
+      mappedPixelData: mappedPixelData.map(row => row.map(cell => ({ ...cell }))),
+      pixelLayers: pixelLayers.map(layer => ({ ...layer, data: clonePixelGrid(layer.data) })),
+      activeLayerId,
+      colorCounts: { ...colorCounts },
+      totalBeadCount,
+    };
+  }, [activeLayerId, mappedPixelData, colorCounts, pixelLayers, totalBeadCount]);
+
+  const restoreEditSnapshot = useCallback((snapshot: EditSnapshot) => {
+    setMappedPixelData(snapshot.mappedPixelData.map(row => row.map(cell => ({ ...cell }))));
+    if (snapshot.pixelLayers) {
+      setPixelLayers(snapshot.pixelLayers.map(layer => ({ ...layer, data: clonePixelGrid(layer.data) })));
+      setActiveLayerId(snapshot.activeLayerId || snapshot.pixelLayers[0]?.id || null);
+    } else {
+      const restoredLayer = createPixelLayer('主体', snapshot.mappedPixelData, { id: 'layer-main' });
+      setPixelLayers([restoredLayer]);
+      setActiveLayerId(restoredLayer.id);
+    }
+    setColorCounts({ ...snapshot.colorCounts });
+    setTotalBeadCount(snapshot.totalBeadCount);
+    setSaveStatus('dirty');
+    setHasUnsavedChanges(true);
+  }, []);
 
   // 编辑模式多步撤回
   const handleUndoEdit = useCallback(() => {
     if (editHistory.length === 0) return;
+    const currentSnapshot = createCurrentEditSnapshot();
     const snapshot = editHistory[editHistory.length - 1];
     setMappedPixelData(snapshot.mappedPixelData);
     if (snapshot.pixelLayers) {
@@ -356,8 +389,25 @@ export default function Home() {
     setColorCounts(snapshot.colorCounts);
     setTotalBeadCount(snapshot.totalBeadCount);
     setEditHistory(prev => prev.slice(0, -1));
+    if (currentSnapshot) {
+      setEditFuture(prev => [...prev.slice(-49), currentSnapshot]);
+    }
+    setSaveStatus('dirty');
+    setHasUnsavedChanges(true);
     showToast('已撤回上一步');
-  }, [editHistory, showToast]);
+  }, [createCurrentEditSnapshot, editHistory, showToast]);
+
+  const handleRedoEdit = useCallback(() => {
+    if (editFuture.length === 0) return;
+    const currentSnapshot = createCurrentEditSnapshot();
+    const snapshot = editFuture[editFuture.length - 1];
+    restoreEditSnapshot(snapshot);
+    setEditFuture(prev => prev.slice(0, -1));
+    if (currentSnapshot) {
+      setEditHistory(prev => [...prev.slice(-49), currentSnapshot]);
+    }
+    showToast('已重做上一步');
+  }, [createCurrentEditSnapshot, editFuture, restoreEditSnapshot, showToast]);
 
   // 一键去背景单步撤回
   const handleUndoBgRemoval = useCallback(() => {
@@ -380,6 +430,7 @@ export default function Home() {
   // 清空编辑历史（参数变化、退出编辑模式等时调用）
   const clearEditHistory = useCallback(() => {
     setEditHistory([]);
+    setEditFuture([]);
   }, []);
 
   // 放大镜像素编辑处理函数
@@ -2429,7 +2480,7 @@ export default function Home() {
     return changed ? nextData : null;
   }, [gridDimensions]);
 
-  const getLineCells = (start: { row: number; col: number }, end: { row: number; col: number }) => {
+  const getLineCells = useCallback((start: { row: number; col: number }, end: { row: number; col: number }) => {
     const cells: { row: number; col: number }[] = [];
     let x0 = start.col;
     let y0 = start.row;
@@ -2456,14 +2507,23 @@ export default function Home() {
     }
 
     return cells;
-  };
+  }, []);
 
-  const getRectCells = (start: { row: number; col: number }, end: { row: number; col: number }) => {
+  const getRectCells = useCallback((start: { row: number; col: number }, end: { row: number; col: number }) => {
     const top = Math.min(start.row, end.row);
     const bottom = Math.max(start.row, end.row);
     const left = Math.min(start.col, end.col);
     const right = Math.max(start.col, end.col);
     const cells: { row: number; col: number }[] = [];
+
+    if (manualRectFilled) {
+      for (let row = top; row <= bottom; row++) {
+        for (let col = left; col <= right; col++) {
+          cells.push({ row, col });
+        }
+      }
+      return cells;
+    }
 
     for (let col = left; col <= right; col++) {
       cells.push({ row: top, col });
@@ -2475,7 +2535,50 @@ export default function Home() {
     }
 
     return cells;
-  };
+  }, [manualRectFilled]);
+
+  const getBrushCells = useCallback((row: number, col: number) => {
+    const size = Math.max(1, Math.min(9, Math.round(manualBrushSize)));
+    const radiusBefore = Math.floor((size - 1) / 2);
+    const radiusAfter = size - 1 - radiusBefore;
+    const cells: { row: number; col: number }[] = [];
+
+    for (let r = row - radiusBefore; r <= row + radiusAfter; r++) {
+      for (let c = col - radiusBefore; c <= col + radiusAfter; c++) {
+        cells.push({ row: r, col: c });
+      }
+    }
+
+    return cells;
+  }, [manualBrushSize]);
+
+  const applyMirrorCells = useCallback((cells: { row: number; col: number }[]) => {
+    if (!gridDimensions || (!manualMirrorX && !manualMirrorY)) return cells;
+
+    const seen = new Set<string>();
+    const mirrored: { row: number; col: number }[] = [];
+    const addCell = (cell: { row: number; col: number }) => {
+      if (cell.row < 0 || cell.col < 0 || cell.row >= gridDimensions.M || cell.col >= gridDimensions.N) return;
+      const key = `${cell.row}:${cell.col}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      mirrored.push(cell);
+    };
+
+    cells.forEach((cell) => {
+      const variants = [
+        cell,
+        manualMirrorX ? { row: cell.row, col: gridDimensions.N - 1 - cell.col } : null,
+        manualMirrorY ? { row: gridDimensions.M - 1 - cell.row, col: cell.col } : null,
+        manualMirrorX && manualMirrorY ? { row: gridDimensions.M - 1 - cell.row, col: gridDimensions.N - 1 - cell.col } : null,
+      ];
+      variants.forEach((variant) => {
+        if (variant) addCell(variant);
+      });
+    });
+
+    return mirrored;
+  }, [gridDimensions, manualMirrorX, manualMirrorY]);
 
   const handleManualCanvasEdit = useCallback((row: number, col: number) => {
     if (!mappedPixelData || !gridDimensions) return;
@@ -2568,7 +2671,7 @@ export default function Home() {
       const cells = manualEditTool === 'line'
         ? getLineCells(manualShapeStart, { row, col })
         : getRectCells(manualShapeStart, { row, col });
-      const nextData = paintCells(mappedPixelData, cells, paintCell);
+      const nextData = paintCells(mappedPixelData, applyMirrorCells(cells), paintCell);
       if (nextData) {
         applyGridEdit(nextData);
       }
@@ -2577,14 +2680,18 @@ export default function Home() {
       return;
     }
 
-    const nextData = paintCells(mappedPixelData, [{ row, col }], paintCell);
+    const nextData = paintCells(mappedPixelData, applyMirrorCells(getBrushCells(row, col)), paintCell);
     if (nextData) {
       applyGridEdit(nextData);
     }
     setTooltipData(null);
   }, [
     applyGridEdit,
+    applyMirrorCells,
     getPaintCellForTool,
+    getBrushCells,
+    getLineCells,
+    getRectCells,
     gridDimensions,
     manualEditTool,
     manualShapeStart,
@@ -3581,8 +3688,6 @@ export default function Home() {
               GitHub
             </a>
           </div>
-          {/* 来源提示 */}
-          <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">发布平台请标注来源或保留图片水印及标识</p>
         </div>
       </header>
 
@@ -4281,7 +4386,9 @@ export default function Home() {
           onToggleMagnifier={handleToggleMagnifier}
           isMagnifierActive={isMagnifierActive}
           canUndo={editHistory.length > 0}
+          canRedo={editFuture.length > 0}
           onUndo={handleUndoEdit}
+          onRedo={handleRedoEdit}
           gridDimensions={gridDimensions}
           totalBeadCount={totalBeadCount}
           projectName={currentProjectName}
@@ -4295,6 +4402,12 @@ export default function Home() {
           onClearSelection={() => setActiveSelection(null)}
           brushSize={manualBrushSize}
           onBrushSizeChange={setManualBrushSize}
+          mirrorX={manualMirrorX}
+          mirrorY={manualMirrorY}
+          onMirrorXChange={setManualMirrorX}
+          onMirrorYChange={setManualMirrorY}
+          rectFilled={manualRectFilled}
+          onRectFilledChange={setManualRectFilled}
           layers={pixelLayers}
           activeLayerId={activeLayerId}
           onLayerSelect={setActiveLayerId}
