@@ -1,78 +1,79 @@
 # 拼豆底稿生成器
 
-一个面向个人自用的拼豆图纸工作台。它把图片转换成拼豆底稿，支持手动编辑、云端项目保存、跨设备同步、版本历史、服务器备份，以及高清图纸或 CSV 下载。
+面向个人使用的拼豆图纸工作台。它把图片转换成拼豆底稿，并提供手动编辑、高清图纸与 CSV 导出、私有云端项目、跨设备同步、版本历史和数据库备份。
 
-当前版本已经从公开画廊/社交发布方向调整为私有工作流：电脑和手机访问同一服务器地址，登录后查看、编辑、保存同一批项目。
+本项目不包含公开画廊、打赏或社交发布。电脑和手机访问同一服务器地址，登录后即可查看和编辑同一批项目。
 
-> 本项目不接入公开画廊、作品列表或社交发布功能。
+## 功能
 
-## 当前能力
-
-- 图片转拼豆底稿：支持 Jett Cartoon、Jett Realistic、主导色、均值等处理模式，默认使用 Jett Cartoon，并优先显示两个 Jett 模式。
-- 多色号系统：内置 MARD、COCO、漫漫、盼盼、咪小窝等色号映射。
-- 自定义色板：可选择预设色板，也可手动调整可用颜色。
-- 去除杂色：按使用颗数从低到高展示颜色，方便先处理少量杂色。
-- 手动编辑：包含拖拽、画笔、橡皮、取色、填充、直线、矩形、框选、移动、粘贴、放大镜和图层管理。
-- 编辑增强：支持撤回/重做、笔刷大小、水平/垂直镜像、矩形描边/填满、移动端底部工具栏。
-- 自由画布：编辑模式下画布铺满页面，对象可拖动查看；鼠标滚轮不会再缩放画布。
-- 云端项目：项目保存到服务器 SQLite，手机和电脑可打开同一项目继续编辑。
-- 实时同步：服务器提供项目事件流，其他设备保存后，当前设备可自动拉取新版本；轮询作为兜底。
-- 版本历史：创建、保存、重命名、恢复、删除都会留下版本快照，可从历史中恢复为新版本。
-- 服务器备份：支持每日自动备份和手动创建数据库备份。
-- 分享码：保留私用导入/导出能力，适合自己跨设备迁移或临时发送给别人导入副本。
-- 打卡预览：可生成作品打卡图，支持不同样式和自定义照片。
-- 下载：下载时可选择高清 PNG 图纸或 CSV 源数据；PNG 固定为“有色 + 色号”图纸，支持网格、坐标、色号标注和大色块用料清单，不添加水印、二维码、作者或分享码。
-- CSV 修复：透明格使用 `__TRANSPARENT__` 标记，白色珠子保留为 `#FFFFFF`，避免重新导入时把白色误判成透明。
-- 私有登录：通过 `PERLER_APP_PASSWORD` 设置访问密码。
+- 图片处理：默认使用 Jett Cartoon，并优先显示 Jett Cartoon、Jett Realistic 两种模式。
+- 色号系统：支持 MARD、COCO、漫漫、盼盼、咪小窝等色板和自定义颜色范围。
+- 杂色整理：按实际使用颗数排序，方便优先替换少量杂色。
+- 手动编辑：画笔、橡皮、取色、填充、直线、矩形、框选、移动、粘贴、镜像、撤回和重做。
+- 自由画布：编辑对象可平移和缩放，适合大尺寸图纸精修。
+- 云端项目：SQLite 保存项目，手机和电脑可继续编辑同一项目。
+- 实时同步：Server-Sent Events 推送项目更新，并以轮询作为兼容兜底。
+- 版本与备份：保存历史版本、恢复版本，并创建数据库备份。
+- 图纸导出：固定为“有色 + 色号”高清 PNG，包含坐标、网格和紧凑用料清单，不添加水印、二维码、作者或分享码。
+- CSV 导入导出：透明格使用 `__TRANSPARENT__`，白色珠子保留为 `#FFFFFF`。
+- 私有登录：通过 `PERLER_APP_PASSWORD` 保护项目与图片。
 
 ## 技术栈
 
 | 部分 | 技术 |
 | --- | --- |
-| 框架 | Next.js 15 / React 19 / TypeScript |
+| Web | Next.js 15、React 19、TypeScript |
 | 样式 | Tailwind CSS |
-| 图像处理 | Browser Canvas API |
-| 服务端存储 | SQLite / better-sqlite3 |
-| 同步 | Server-Sent Events + 轮询兜底 |
-| 部署 | Node.js / PM2 / Nginx |
+| 图片处理 | Browser Canvas API |
+| 数据 | SQLite、better-sqlite3 |
+| 同步 | Server-Sent Events + 轮询 |
+| 部署 | Node.js、PM2、Nginx |
 
 ## 本地运行
+
+要求 Node.js 20 或更高版本。
 
 ```bash
 npm install
 npm run dev
 ```
 
-默认访问：
+打开 [http://localhost:3000](http://localhost:3000)。本地不设置密码时可直接访问；测试登录保护时：
 
-```text
-http://localhost:3000
+```powershell
+$env:PERLER_APP_PASSWORD="your-password"
+npm run dev
 ```
 
-如需测试登录保护：
+生产构建检查：
 
 ```bash
-PERLER_APP_PASSWORD='your-password' npm run dev
-```
-
-## 生产部署
-
-推荐使用 Node.js + PM2 运行，并用 Nginx 做反向代理。
-
-```bash
-npm install
 npm run build
-PORT=3000 PERLER_DATA_DIR=/data/perler PERLER_APP_PASSWORD='change-this-password' npm run start -- -p 3000
 ```
 
-PM2 示例：
+## 一键部署
 
-```bash
-PORT=3000 PERLER_DATA_DIR=/data/perler PERLER_APP_PASSWORD='change-this-password' pm2 start npm --name perler-beads -- run start -- -p 3000
-pm2 save
+当前百度云服务器可从 Windows 本地一键发布：
+
+```powershell
+.\scripts\deploy.ps1
 ```
 
-数据目录示例：
+发布脚本使用独立版本目录、健康检查和自动回滚，并保留 `/data/perler` 中的数据库、上传文件和备份。密码只保存在服务器的 `/opt/perler-beads/shared/app.env`，不会提交到 GitHub。
+
+首次配置、参数覆盖、Nginx 和手动回滚见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `3000` | Next.js 监听端口 |
+| `PERLER_DATA_DIR` | 项目内 `data/perler` | SQLite、备份和上传目录 |
+| `PERLER_APP_PASSWORD` | 无 | 访问密码，公网部署必须设置 |
+
+## 项目数据
+
+生产环境推荐目录：
 
 ```text
 /data/perler
@@ -83,50 +84,22 @@ pm2 save
 └── uploads/
 ```
 
-## 环境变量
+不要把此目录放入代码版本目录，也不要在发布时删除。应用内备份之外，建议再配置百度云磁盘快照或异地备份。
 
-| 变量 | 必填 | 说明 |
-| --- | --- | --- |
-| `PORT` | 否 | Next.js 监听端口 |
-| `PERLER_DATA_DIR` | 否 | SQLite、备份和上传目录，默认是项目内 `data/perler` |
-| `PERLER_APP_PASSWORD` | 建议 | 登录密码；部署到公网时必须设置 |
-
-## 私有访问建议
-
-应用内已有密码登录。公网部署时仍建议在 Nginx 层增加 Basic Auth，或只开放给可信网络访问。这个工具会处理图片和项目数据，不适合作为公开站点随意开放上传。
-
-## API 概览
+## 常用 API
 
 - `GET /api/projects`：项目列表
-- `POST /api/projects`：创建项目
+- `POST /api/projects`：新建项目
 - `GET /api/projects/:id`：项目详情
 - `PUT /api/projects/:id`：保存项目
 - `PATCH /api/projects/:id`：重命名项目
 - `DELETE /api/projects/:id`：删除项目
 - `GET /api/projects/events`：项目变更事件流
 - `GET /api/projects/:id/versions`：版本历史
-- `GET /api/projects/:id/versions/:version`：版本快照
 - `POST /api/projects/:id/versions/:version`：恢复版本
 - `GET /api/backups`：备份列表
-- `POST /api/backups`：创建数据库备份
-
-## 备份策略
-
-服务器启动数据库时会确保当天存在一个 `daily-YYYY-MM-DD-...db` 备份。也可以在“历史与备份”弹窗中手动创建备份。建议额外用服务器定时任务把 `/data/perler` 复制到对象存储或另一台机器。
-
-## 已完成重点
-
-- 私有登录和服务器项目保存
-- 手机/电脑打开同一项目继续编辑
-- 实时同步事件流
-- 版本历史和恢复
-- 服务器数据库备份
-- Zippland 风格手动编辑工作台
-- 图层、笔刷大小、框选移动和粘贴
-- 高清 PNG/CSV 下载选择
-- Zippland 风格图纸导出：大号色号系统页眉、四边坐标、彩色色号格、紧凑大色块用料清单
-- 作品打卡图和分享码导入/导出
+- `POST /api/backups`：创建备份
 
 ## 许可
 
-本项目基于原开源项目继续改造，遵循仓库内 [LICENSE](./LICENSE)。
+本项目基于原开源项目继续改造，使用条款见 [LICENSE](./LICENSE)。
