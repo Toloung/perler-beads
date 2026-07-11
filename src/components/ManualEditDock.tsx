@@ -304,7 +304,7 @@ export default function ManualEditDock({
 
   return (
     <>
-      <aside className="fixed left-3 top-[104px] z-[70] hidden max-h-[calc(100vh-128px)] w-[64px] flex-col items-center gap-2 overflow-y-auto rounded-2xl border border-white/15 bg-gray-950/72 p-2 shadow-2xl backdrop-blur-xl xl:flex">
+      <aside className="fixed left-3 top-[104px] z-[70] hidden max-h-[calc(100vh-128px)] w-[64px] flex-col items-center gap-2 overflow-y-auto rounded-2xl border border-white/15 bg-gray-950/72 p-2 shadow-2xl backdrop-blur-xl lg:flex">
         <button
           type="button"
           onClick={onToggleFullPalette}
@@ -330,7 +330,7 @@ export default function ManualEditDock({
         <ToolButton icon={icons.close} label="退出" title="退出编辑" onClick={onExitManualMode} />
       </aside>
 
-      <aside className="fixed right-3 top-[104px] z-[60] hidden max-h-[calc(100vh-128px)] w-[328px] overflow-y-auto rounded-2xl border border-white/60 bg-white/72 p-3 shadow-2xl backdrop-blur-2xl xl:block dark:border-white/10 dark:bg-gray-900/74">
+      <aside className="fixed right-3 top-[104px] z-[60] hidden max-h-[calc(100vh-128px)] w-[328px] overflow-y-auto rounded-2xl border border-white/60 bg-white/72 p-3 shadow-2xl backdrop-blur-2xl lg:block dark:border-white/10 dark:bg-gray-900/74">
         <section className="rounded-xl bg-white/60 p-4 dark:bg-white/5">
           <div className="mb-3 flex items-center gap-2">
             <span className="text-gray-500">{icons.brush}</span>
@@ -439,7 +439,7 @@ export default function ManualEditDock({
       </aside>
 
       {mobilePanel && (
-        <section className="fixed inset-x-2 bottom-[82px] z-[80] max-h-[min(48vh,360px)] overflow-y-auto rounded-2xl border border-white/60 bg-white/95 p-3 shadow-2xl backdrop-blur-2xl xl:hidden dark:border-white/10 dark:bg-gray-900/95">
+        <section className="fixed inset-x-2 bottom-[82px] z-[80] max-h-[min(48vh,360px)] overflow-y-auto rounded-2xl border border-white/60 bg-white/95 p-3 shadow-2xl backdrop-blur-2xl lg:hidden dark:border-white/10 dark:bg-gray-900/95">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
               {mobilePanel === 'palette' ? '颜色' : mobilePanel === 'settings' ? '笔刷与形状' : `选区 ${selectionSize || ''}`}
@@ -491,7 +491,7 @@ export default function ManualEditDock({
         </section>
       )}
 
-      <div className="fixed inset-x-2 bottom-2 z-[81] rounded-2xl border border-white/60 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl xl:hidden dark:border-white/10 dark:bg-gray-900/90">
+      <div className="fixed inset-x-2 bottom-2 z-[81] rounded-2xl border border-white/60 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl lg:hidden dark:border-white/10 dark:bg-gray-900/90">
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           <button type="button" onClick={() => setMobilePanel(mobilePanel === 'palette' ? null : 'palette')} className={`grid h-12 min-w-[58px] place-items-center rounded-xl border px-2 text-xs font-semibold shadow-sm ${mobilePanel === 'palette' ? 'border-[#d97757] bg-[#d97757] text-white' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'}`} title="颜色" aria-label="颜色">
             <span className="h-6 w-6 rounded-lg border border-gray-300" style={{ backgroundColor: activeTool === 'eraser' ? '#FFFFFF' : selectedColor?.color || '#FFFFFF' }} />

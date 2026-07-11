@@ -90,7 +90,7 @@ export default function CanvasMiniMap({
   };
 
   return (
-    <section className="fixed bottom-[142px] right-3 z-[72] rounded-xl border border-white/70 bg-white/88 p-2 shadow-xl backdrop-blur-xl xl:bottom-4 xl:right-[352px] dark:border-white/10 dark:bg-gray-900/85">
+    <section className="fixed bottom-[142px] right-3 z-[72] rounded-xl border border-white/70 bg-white/88 p-2 shadow-xl backdrop-blur-xl lg:bottom-4 lg:right-[352px] dark:border-white/10 dark:bg-gray-900/85">
       <div className="mb-1 flex items-center justify-between gap-3 px-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
         <span>总览</span>
         <span>{gridDimensions.N} x {gridDimensions.M}</span>
