@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { GridSelection } from '../utils/gridEditing';
 import { MappedPixel } from '../utils/pixelation';
 import { TRANSPARENT_KEY } from '../utils/pixelEditingUtils';
@@ -255,6 +255,7 @@ export default function ManualEditDock({
   onPasteAtSelection,
   onClearSelection,
 }: ManualEditDockProps) {
+  const [mobilePanel, setMobilePanel] = useState<'palette' | 'settings' | 'selection' | null>(null);
   const paletteColors = showFullPalette ? fullPaletteColors : currentGridColors;
   const currentLabel = activeTool === 'eraser'
     ? '橡皮'
@@ -437,9 +438,62 @@ export default function ManualEditDock({
         </section>
       </aside>
 
-      <div className="fixed inset-x-2 bottom-2 z-[80] rounded-2xl border border-white/60 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl xl:hidden dark:border-white/10 dark:bg-gray-900/90">
+      {mobilePanel && (
+        <section className="fixed inset-x-2 bottom-[82px] z-[80] max-h-[min(48vh,360px)] overflow-y-auto rounded-2xl border border-white/60 bg-white/95 p-3 shadow-2xl backdrop-blur-2xl xl:hidden dark:border-white/10 dark:bg-gray-900/95">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+              {mobilePanel === 'palette' ? '颜色' : mobilePanel === 'settings' ? '笔刷与形状' : `选区 ${selectionSize || ''}`}
+            </h2>
+            <button type="button" onClick={() => setMobilePanel(null)} className="grid h-8 w-8 place-items-center rounded-lg border border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200" aria-label="收起面板" title="收起面板">
+              {icons.close}
+            </button>
+          </div>
+
+          {mobilePanel === 'palette' && (
+            <>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400">{showFullPalette ? '完整色盘' : `当前图纸 ${currentGridColors.length} 色`}</span>
+                <button type="button" onClick={onToggleFullPalette} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                  {showFullPalette ? '仅看已用色' : '查看完整色盘'}
+                </button>
+              </div>
+              {paletteGrid}
+            </>
+          )}
+
+          {mobilePanel === 'settings' && (
+            <div className="space-y-4">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">
+                笔刷大小 {brushSize} x {brushSize}
+                <input type="range" min={1} max={9} step={1} value={brushSize} onChange={(event) => onBrushSizeChange(Number(event.target.value))} className="mt-3 w-full accent-[#d97757]" />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <ToggleChip active={mirrorX} onClick={() => onMirrorXChange(!mirrorX)}>水平镜像</ToggleChip>
+                <ToggleChip active={mirrorY} onClick={() => onMirrorYChange(!mirrorY)}>垂直镜像</ToggleChip>
+                <ToggleChip active={rectFilled} onClick={() => onRectFilledChange(!rectFilled)}>矩形填满</ToggleChip>
+                <CommandButton icon={icons.resize} onClick={onCanvasTools}>画布工具</CommandButton>
+              </div>
+              <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">双指可缩放画布；切换到拖拽工具后，单指可移动画布。</p>
+            </div>
+          )}
+
+          {mobilePanel === 'selection' && (
+            <div className="grid grid-cols-2 gap-2">
+              <CommandButton icon={icons.copy} disabled={!activeSelection} onClick={onCopySelection}>复制</CommandButton>
+              <CommandButton icon={icons.cut} disabled={!activeSelection} onClick={onCutSelection}>剪切</CommandButton>
+              <CommandButton icon={icons.paste} disabled={!hasClipboard || !activeSelection} onClick={onPasteAtSelection}>粘贴</CommandButton>
+              <CommandButton icon={icons.trash} tone="danger" disabled={!activeSelection} onClick={onDeleteSelection}>删除</CommandButton>
+              <button type="button" disabled={!activeSelection} onClick={() => { onClearSelection(); setMobilePanel(null); }} className="col-span-2 min-h-10 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 disabled:opacity-35 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                取消选区
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      <div className="fixed inset-x-2 bottom-2 z-[81] rounded-2xl border border-white/60 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl xl:hidden dark:border-white/10 dark:bg-gray-900/90">
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <button type="button" onClick={onToggleFullPalette} className="grid h-12 min-w-[58px] place-items-center rounded-xl border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" title="切换色板" aria-label="切换色板">
+          <button type="button" onClick={() => setMobilePanel(mobilePanel === 'palette' ? null : 'palette')} className={`grid h-12 min-w-[58px] place-items-center rounded-xl border px-2 text-xs font-semibold shadow-sm ${mobilePanel === 'palette' ? 'border-[#d97757] bg-[#d97757] text-white' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'}`} title="颜色" aria-label="颜色">
             <span className="h-6 w-6 rounded-lg border border-gray-300" style={{ backgroundColor: activeTool === 'eraser' ? '#FFFFFF' : selectedColor?.color || '#FFFFFF' }} />
             <span className="mt-0.5 text-[10px] leading-none">{currentLabel}</span>
           </button>
@@ -453,32 +507,9 @@ export default function ManualEditDock({
         <div className="mt-1 flex items-center gap-2 overflow-x-auto border-t border-gray-200 pt-2 dark:border-gray-800">
           <button type="button" onClick={onUndo} disabled={!canUndo} className="flex h-10 min-w-[60px] items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-100 px-2 text-xs font-semibold text-gray-700 disabled:opacity-35 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">{icons.undo}<span>撤回</span></button>
           <button type="button" onClick={onRedo} disabled={!canRedo} className="flex h-10 min-w-[60px] items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-100 px-2 text-xs font-semibold text-gray-700 disabled:opacity-35 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">{icons.redo}<span>重做</span></button>
-          <ToggleChip active={mirrorX} onClick={() => onMirrorXChange(!mirrorX)}>水平镜像</ToggleChip>
-          <ToggleChip active={mirrorY} onClick={() => onMirrorYChange(!mirrorY)}>垂直镜像</ToggleChip>
-          <ToggleChip active={rectFilled} onClick={() => onRectFilledChange(!rectFilled)}>矩形填满</ToggleChip>
-          <label className="flex min-w-[150px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
-            笔刷 {brushSize}
-            <input type="range" min={1} max={9} step={1} value={brushSize} onChange={(event) => onBrushSizeChange(Number(event.target.value))} className="w-20 accent-[#d97757]" />
-          </label>
-        </div>
-
-        <div className="mt-1 flex gap-1.5 overflow-x-auto pt-1">
-          {paletteColors.slice(0, 48).map(({ key, color }) => {
-            const displayKey = getColorKeyByHex(color, selectedColorSystem);
-            return (
-              <button
-                key={`${key}-${color}`}
-                type="button"
-                onClick={() => onColorSelect({ key, color, isExternal: showFullPalette })}
-                className="h-8 min-w-10 rounded-lg border border-gray-200 text-[10px] font-bold text-gray-700 shadow-sm dark:border-gray-700 dark:text-gray-200"
-                style={{ backgroundColor: color === TRANSPARENT_KEY ? '#FFFFFF' : color }}
-                title={displayKey}
-                aria-label={`选择 ${displayKey}`}
-              >
-                <span className="rounded bg-white/78 px-1 dark:bg-gray-900/72">{displayKey}</span>
-              </button>
-            );
-          })}
+          <button type="button" onClick={() => setMobilePanel(mobilePanel === 'settings' ? null : 'settings')} className={`flex h-10 min-w-[72px] items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold ${mobilePanel === 'settings' ? 'border-[#d97757] bg-[#d97757] text-white' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}>{icons.brush}<span>笔刷</span></button>
+          <button type="button" onClick={() => setMobilePanel(mobilePanel === 'selection' ? null : 'selection')} disabled={!activeSelection} className={`flex h-10 min-w-[72px] items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold disabled:opacity-35 ${mobilePanel === 'selection' ? 'border-[#d97757] bg-[#d97757] text-white' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}>{icons.select}<span>选区</span></button>
+          <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">双指缩放</span>
         </div>
       </div>
     </>

@@ -138,6 +138,14 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const [darkModeState, setDarkModeState] = useState<boolean | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number; pageX: number; pageY: number } | null>(null);
   const touchMovedRef = useRef<boolean>(false);
+  const touchGestureRef = useRef<{
+    mode: 'pan' | 'pinch';
+    startX: number;
+    startY: number;
+    startDistance?: number;
+    startDisplaySize: { width: number; height: number };
+    startOffset: { x: number; y: number };
+  } | null>(null);
   const isMousePaintingRef = useRef(false);
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
@@ -379,6 +387,35 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     const touch = event.touches[0];
     if (!touch) return;
 
+    if (isManualColoringMode && event.touches.length >= 2 && displaySize) {
+      const secondTouch = event.touches[1];
+      const distance = Math.hypot(secondTouch.clientX - touch.clientX, secondTouch.clientY - touch.clientY);
+      touchGestureRef.current = {
+        mode: 'pinch',
+        startX: (touch.clientX + secondTouch.clientX) / 2,
+        startY: (touch.clientY + secondTouch.clientY) / 2,
+        startDistance: Math.max(1, distance),
+        startDisplaySize: displaySize,
+        startOffset: canvasOffset,
+      };
+      touchMovedRef.current = true;
+      event.preventDefault();
+      return;
+    }
+
+    if (isManualColoringMode && isPanTool && displaySize) {
+      touchGestureRef.current = {
+        mode: 'pan',
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startDisplaySize: displaySize,
+        startOffset: canvasOffset,
+      };
+      touchMovedRef.current = true;
+      event.preventDefault();
+      return;
+    }
+
     // Record the start position and reset movement state.
     touchStartPosRef.current = {
       x: touch.clientX,
@@ -406,7 +443,35 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   // Hide tooltip if a touch turns into a move.
   const handleTouchMove = (event: TouchEvent<HTMLCanvasElement>) => {
     const touch = event.touches[0];
-    if (!touch || !touchStartPosRef.current) return;
+    if (!touch) return;
+
+    const gesture = touchGestureRef.current;
+    if (gesture) {
+      if (gesture.mode === 'pinch' && event.touches.length >= 2 && gesture.startDistance) {
+        const secondTouch = event.touches[1];
+        const distance = Math.hypot(secondTouch.clientX - touch.clientX, secondTouch.clientY - touch.clientY);
+        const scale = distance / gesture.startDistance;
+        const baseSize = baseDisplaySizeRef.current || gesture.startDisplaySize;
+        const minScale = 0.35;
+        const maxScale = 12;
+        const nextWidth = Math.round(Math.min(baseSize.width * maxScale, Math.max(baseSize.width * minScale, gesture.startDisplaySize.width * scale)));
+        const nextHeight = Math.round(Math.min(baseSize.height * maxScale, Math.max(baseSize.height * minScale, gesture.startDisplaySize.height * scale)));
+        setDisplaySize({ width: nextWidth, height: nextHeight });
+        setCanvasOffset({
+          x: gesture.startOffset.x + ((touch.clientX + secondTouch.clientX) / 2 - gesture.startX),
+          y: gesture.startOffset.y + ((touch.clientY + secondTouch.clientY) / 2 - gesture.startY),
+        });
+      } else if (gesture.mode === 'pan') {
+        setCanvasOffset({
+          x: gesture.startOffset.x + touch.clientX - gesture.startX,
+          y: gesture.startOffset.y + touch.clientY - gesture.startY,
+        });
+      }
+      event.preventDefault();
+      return;
+    }
+
+    if (!touchStartPosRef.current) return;
 
     if (isManualColoringMode && continuousManualInput) {
       event.preventDefault();
@@ -445,7 +510,17 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   };
   
   // Touch end no longer hides the tooltip automatically.
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (event: TouchEvent<HTMLCanvasElement>) => {
+    if (touchGestureRef.current) {
+      touchGestureRef.current = null;
+      touchStartPosRef.current = null;
+      lastManualCellRef.current = null;
+      touchMovedRef.current = false;
+      if (event.touches.length === 1) {
+        event.preventDefault();
+      }
+      return;
+    }
     if (isManualColoringMode && onManualPointerCell && touchStartPosRef.current) {
       const cell = lastManualCellRef.current || getCellFromPointer(touchStartPosRef.current.x, touchStartPosRef.current.y);
       if (cell) onManualPointerCell('up', cell.row, cell.col);
