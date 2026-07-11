@@ -101,7 +101,8 @@ const manualEditTools: { tool: ManualEditTool; label: string; title: string }[] 
 // ++ Add definition for background color keys ++
 
 // 1. 导入新组件
-import PixelatedPreviewCanvas from '../components/PixelatedPreviewCanvas';
+import PixelatedPreviewCanvas, { EditorViewport } from '../components/PixelatedPreviewCanvas';
+import CanvasMiniMap from '../components/CanvasMiniMap';
 import GridTooltip from '../components/GridTooltip';
 import CustomPaletteEditor from '../components/CustomPaletteEditor';
 import FloatingColorPalette from '../components/FloatingColorPalette';
@@ -184,6 +185,8 @@ export default function Home() {
   const [manualMirrorX, setManualMirrorX] = useState<boolean>(false);
   const [manualMirrorY, setManualMirrorY] = useState<boolean>(false);
   const [manualRectFilled, setManualRectFilled] = useState<boolean>(false);
+  const [editorViewport, setEditorViewport] = useState<EditorViewport | null>(null);
+  const [viewportRequest, setViewportRequest] = useState<{ x: number; y: number; nonce: number } | null>(null);
   const [manualShapeStart, setManualShapeStart] = useState<{ row: number; col: number } | null>(null);
   const [selectedColor, setSelectedColor] = useState<MappedPixel | null>(null);
   // 新增：一键擦除模式状态
@@ -4065,6 +4068,8 @@ export default function Home() {
                     isManualColoringMode={isManualColoringMode}
                     continuousManualInput={manualEditTool === 'brush' || manualEditTool === 'eraser'}
                     isPanTool={manualEditTool === 'pan'}
+                    onViewportChange={setEditorViewport}
+                    viewportRequest={viewportRequest}
                     onInteraction={handleCanvasInteraction}
                     onManualPointerCell={handleManualPointerCell}
                     highlightColorKey={highlightColorKey}
@@ -4345,6 +4350,7 @@ export default function Home() {
       </div>
 
       {isManualColoringMode && (
+        <>
         <ManualEditDock
           activeTool={manualEditTool}
           onToolChange={(tool) => {
@@ -4417,6 +4423,14 @@ export default function Home() {
           onToggleLayerVisibility={handleToggleLayerVisibility}
           onToggleLayerLock={handleToggleLayerLock}
         />
+
+        <CanvasMiniMap
+          mappedPixelData={mappedPixelData}
+          gridDimensions={gridDimensions}
+          viewport={editorViewport}
+          onNavigate={({ x, y }) => setViewportRequest({ x, y, nonce: Date.now() })}
+        />
+        </>
       )}
 
       {/* 悬浮工具栏 */}

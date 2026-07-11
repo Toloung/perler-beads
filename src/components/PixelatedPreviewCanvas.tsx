@@ -4,6 +4,15 @@ import React, { useRef, useEffect, TouchEvent, MouseEvent, WheelEvent, useState 
 import { MappedPixel } from '../utils/pixelation';
 import { GridSelection } from '../utils/gridEditing';
 
+export type EditorViewport = {
+  displayWidth: number;
+  displayHeight: number;
+  offsetX: number;
+  offsetY: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
 interface PixelatedPreviewCanvasProps {
   mappedPixelData: MappedPixel[][] | null;
   gridDimensions: { N: number; M: number } | null;
@@ -23,6 +32,8 @@ interface PixelatedPreviewCanvasProps {
   highlightColorKey?: string | null;
   onHighlightComplete?: () => void;
   isPanTool?: boolean;
+  onViewportChange?: (viewport: EditorViewport) => void;
+  viewportRequest?: { x: number; y: number; nonce: number } | null;
 }
 
 // Draws the bead grid preview canvas.
@@ -134,6 +145,8 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   highlightColorKey,
   onHighlightComplete,
   isPanTool = false,
+  onViewportChange,
+  viewportRequest,
 }) => {
   const [darkModeState, setDarkModeState] = useState<boolean | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number; pageX: number; pageY: number } | null>(null);
@@ -182,6 +195,36 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
         : { width: nextWidth, height: nextHeight }
     ));
   }, [canvasRef, gridDimensions]);
+
+  useEffect(() => {
+    if (!isManualColoringMode || !displaySize || !canvasRef.current || !onViewportChange) return;
+    const container = canvasRef.current.parentElement;
+    if (!container) return;
+
+    const notify = () => {
+      onViewportChange({
+        displayWidth: displaySize.width,
+        displayHeight: displaySize.height,
+        offsetX: canvasOffset.x,
+        offsetY: canvasOffset.y,
+        viewportWidth: container.clientWidth,
+        viewportHeight: container.clientHeight,
+      });
+    };
+
+    notify();
+    const observer = new ResizeObserver(notify);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [canvasRef, canvasOffset.x, canvasOffset.y, displaySize, isManualColoringMode, onViewportChange]);
+
+  useEffect(() => {
+    if (!isManualColoringMode || !displaySize || !viewportRequest) return;
+    setCanvasOffset({
+      x: displaySize.width * (0.5 - viewportRequest.x),
+      y: displaySize.height * (0.5 - viewportRequest.y),
+    });
+  }, [displaySize, isManualColoringMode, viewportRequest]);
 
   const canvasAspectRatio = gridDimensions ? `${gridDimensions.N} / ${gridDimensions.M}` : undefined;
 
