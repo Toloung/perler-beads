@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react';
 
 type CropState = {
   x: number;
@@ -8,6 +8,8 @@ type CropState = {
   width: number;
   height: number;
 };
+
+type CropDragMode = 'move' | 'resize';
 
 function clampPercent(value: number, fallback: number) {
   if (Number.isNaN(value)) return fallback;
@@ -49,11 +51,21 @@ export default function ImageEditorModal({
   onApply: (imageSrc: string) => void;
 }) {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cropWorkspaceRef = useRef<HTMLDivElement>(null);
+  const cropDragRef = useRef<{
+    mode: CropDragMode;
+    startX: number;
+    startY: number;
+    crop: CropState;
+  } | null>(null);
   const [rotation, setRotation] = useState(0);
   const [flipHorizontal, setFlipHorizontal] = useState(false);
   const [flipVertical, setFlipVertical] = useState(false);
   const [crop, setCrop] = useState<CropState>({ x: 0, y: 0, width: 100, height: 100 });
   const [imageRatio, setImageRatio] = useState(1);
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [saturation, setSaturation] = useState(100);
   const [isApplying, setIsApplying] = useState(false);
 
   const renderEditedImage = async (targetCanvas?: HTMLCanvasElement) => {
@@ -78,6 +90,7 @@ export default function ImageEditorModal({
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((normalizedRotation * Math.PI) / 180);
     ctx.scale(flipHorizontal ? -1 : 1, flipVertical ? -1 : 1);
+    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
     ctx.drawImage(
       image,
       sourceX,
@@ -111,7 +124,7 @@ export default function ImageEditorModal({
       // Preview failure is non-fatal; apply will surface the same issue.
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, imageSrc, rotation, flipHorizontal, flipVertical, crop]);
+  }, [open, imageSrc, rotation, flipHorizontal, flipVertical, crop, brightness, contrast, saturation]);
 
   useEffect(() => {
     if (!open) return;
@@ -120,6 +133,9 @@ export default function ImageEditorModal({
     setFlipHorizontal(false);
     setFlipVertical(false);
     setCrop({ x: 0, y: 0, width: 100, height: 100 });
+    setBrightness(100);
+    setContrast(100);
+    setSaturation(100);
   }, [open, imageSrc]);
 
   if (!open || !imageSrc) return null;
@@ -141,7 +157,62 @@ export default function ImageEditorModal({
       setCrop({ x: 0, y: 0, width: 100, height: 100 });
       return;
     }
-    setCrop(centeredCropForRatio(imageRatio, ratio));
+    const normalizedRotation = ((rotation % 360) + 360) % 360;
+    const sourceRatio = normalizedRotation === 90 || normalizedRotation === 270 ? 1 / ratio : ratio;
+    setCrop(centeredCropForRatio(imageRatio, sourceRatio));
+  };
+
+  const beginCropDrag = (event: ReactPointerEvent<HTMLElement>, mode: CropDragMode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cropDragRef.current = {
+      mode,
+      startX: event.clientX,
+      startY: event.clientY,
+      crop,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleCropPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = cropDragRef.current;
+    const workspace = cropWorkspaceRef.current;
+    if (!drag || !workspace) return;
+
+    const rect = workspace.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const deltaX = ((event.clientX - drag.startX) / rect.width) * 100;
+    const deltaY = ((event.clientY - drag.startY) / rect.height) * 100;
+
+    setCrop(() => {
+      if (drag.mode === 'move') {
+        return {
+          ...drag.crop,
+          x: Math.max(0, Math.min(100 - drag.crop.width, drag.crop.x + deltaX)),
+          y: Math.max(0, Math.min(100 - drag.crop.height, drag.crop.y + deltaY)),
+        };
+      }
+
+      return {
+        ...drag.crop,
+        width: Math.max(8, Math.min(100 - drag.crop.x, drag.crop.width + deltaX)),
+        height: Math.max(8, Math.min(100 - drag.crop.y, drag.crop.height + deltaY)),
+      };
+    });
+  };
+
+  const finishCropDrag = () => {
+    cropDragRef.current = null;
+  };
+
+  const resetEdits = () => {
+    setRotation(0);
+    setFlipHorizontal(false);
+    setFlipVertical(false);
+    setCrop({ x: 0, y: 0, width: 100, height: 100 });
+    setBrightness(100);
+    setContrast(100);
+    setSaturation(100);
   };
 
   const handleApply = async () => {
@@ -158,9 +229,50 @@ export default function ImageEditorModal({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 p-2 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
-      <div className="grid max-h-[94vh] w-full max-w-4xl gap-4 overflow-y-auto rounded-2xl bg-white p-3 shadow-2xl dark:bg-gray-800 sm:p-4 md:grid-cols-[minmax(0,1fr)_300px]" onClick={(event) => event.stopPropagation()}>
-        <div className="flex min-h-[260px] items-center justify-center rounded-xl bg-gray-100 p-3 dark:bg-gray-900">
-          <canvas ref={previewCanvasRef} className="max-h-[62vh] max-w-full rounded-lg shadow-sm" />
+      <div className="grid max-h-[94vh] w-full max-w-5xl gap-4 overflow-y-auto rounded-2xl bg-white p-3 shadow-2xl dark:bg-gray-800 sm:p-4 md:grid-cols-[minmax(0,1fr)_320px]" onClick={(event) => event.stopPropagation()}>
+        <div className="min-w-0 space-y-3">
+          <div className="rounded-xl bg-gray-100 p-3 dark:bg-gray-900">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <span>拖动裁切框移动，拖右下角调整大小</span>
+              <span>{Math.round(crop.width)}% x {Math.round(crop.height)}%</span>
+            </div>
+            <div className="flex min-h-[260px] items-center justify-center overflow-auto">
+              <div
+                ref={cropWorkspaceRef}
+                className="relative inline-block max-w-full touch-none select-none"
+                onPointerMove={handleCropPointerMove}
+                onPointerUp={finishCropDrag}
+                onPointerCancel={finishCropDrag}
+              >
+                <img src={imageSrc} alt="待处理图片" draggable={false} className="block max-h-[48vh] max-w-full rounded-lg shadow-sm" />
+                <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
+                <div
+                  className="absolute cursor-move border-2 border-[#d97757] bg-[#d97757]/10 shadow-[0_0_0_1px_rgba(255,255,255,0.9)]"
+                  style={{ left: `${crop.x}%`, top: `${crop.y}%`, width: `${crop.width}%`, height: `${crop.height}%` }}
+                  onPointerDown={(event) => beginCropDrag(event, 'move')}
+                  aria-label="裁切区域"
+                >
+                  <span className="absolute -left-1 -top-1 h-2 w-2 rounded-full border border-white bg-[#d97757]" />
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full border border-white bg-[#d97757]" />
+                  <span className="absolute -bottom-1 -left-1 h-2 w-2 rounded-full border border-white bg-[#d97757]" />
+                  <button
+                    type="button"
+                    onPointerDown={(event) => beginCropDrag(event, 'resize')}
+                    className="absolute -bottom-3 -right-3 grid h-6 w-6 cursor-nwse-resize place-items-center rounded-full border-2 border-white bg-[#d97757] text-xs font-bold text-white shadow"
+                    aria-label="调整裁切大小"
+                  >
+                    ↘
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+            <p className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">处理后预览</p>
+            <div className="flex max-h-[220px] min-h-28 items-center justify-center overflow-auto rounded-lg bg-gray-100 p-2 dark:bg-gray-950">
+              <canvas ref={previewCanvasRef} className="max-h-[200px] max-w-full rounded-lg shadow-sm" />
+            </div>
+          </div>
         </div>
 
         <aside className="space-y-4">
@@ -169,9 +281,10 @@ export default function ImageEditorModal({
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">编辑图片</h3>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">先裁切、旋转或翻转，再重新生成底稿。</p>
             </div>
-            <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">
-              关闭
-            </button>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={resetEdits} className="rounded-md px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">重置</button>
+              <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">关闭</button>
+            </div>
           </div>
 
           <section className="space-y-2">
@@ -190,6 +303,20 @@ export default function ImageEditorModal({
                 垂直翻转
               </button>
             </div>
+          </section>
+
+          <section className="space-y-3">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">画面调整</h4>
+            {([
+              ['brightness', '亮度', brightness, setBrightness],
+              ['contrast', '对比度', contrast, setContrast],
+              ['saturation', '饱和度', saturation, setSaturation],
+            ] as const).map(([key, label, value, onChange]) => (
+              <label key={key} className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+                <span className="flex items-center justify-between"><span>{label}</span><span>{value}%</span></span>
+                <input type="range" min="50" max="150" step="1" value={value} onChange={(event) => onChange(Number(event.target.value))} className="mt-2 w-full accent-[#d97757]" />
+              </label>
+            ))}
           </section>
 
           <section className="space-y-2">
