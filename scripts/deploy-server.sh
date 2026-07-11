@@ -10,6 +10,7 @@ shared_dir="$remote_root/shared"
 env_file="$shared_dir/app.env"
 current_link="$remote_root/current"
 previous_release=""
+status_file="$release_dir/.deploy-status"
 
 if [[ -z "$release_dir" || ! -d "$release_dir" ]]; then
   echo "Release directory is missing: $release_dir" >&2
@@ -17,6 +18,8 @@ if [[ -z "$release_dir" || ! -d "$release_dir" ]]; then
 fi
 
 mkdir -p "$remote_root/releases" "$shared_dir" "$data_dir"
+printf 'running\n' > "$status_file"
+trap 'printf "failed\n" > "$status_file"' ERR
 
 if [[ -L "$current_link" || -e "$current_link" ]]; then
   previous_release="$(readlink -f "$current_link" || true)"
@@ -109,6 +112,9 @@ fi
 
 pm2 save >/dev/null
 
+printf 'success\n' > "$status_file"
+trap - ERR
+
 find "$remote_root/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
   | sort -nr \
   | awk 'NR > 5 { sub(/^[^ ]+ /, ""); print }' \
@@ -116,7 +122,7 @@ find "$remote_root/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 
       if [[ "$old_release" != "$release_dir" && "$old_release" != "$previous_release" ]]; then
         rm -rf -- "$old_release"
       fi
-    done
+    done || true
 
 echo "Active release: $release_dir"
 echo "Persistent data: $PERLER_DATA_DIR"

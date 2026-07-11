@@ -66,21 +66,48 @@ try {
   $target = "$User@$Server"
   $remoteArchive = "/tmp/perler-beads-$releaseId.tar.gz"
   $releasePath = "$RemoteRoot/releases/$releaseId"
+  $remoteStatus = "$releasePath/.deploy-status"
+  $remoteLog = "/tmp/perler-beads-$releaseId.log"
   $sshArgs = @("-i", $identityPath, "-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
 
   Write-Host "[3/5] Uploading to $target..." -ForegroundColor Cyan
   Invoke-Checked "scp.exe" @($sshArgs + @($archivePath, "${target}:$remoteArchive"))
 
-  Write-Host "[4/5] Building and activating on the server..." -ForegroundColor Cyan
+  Write-Host "[4/5] Starting the server build..." -ForegroundColor Cyan
   $remoteCommand = @(
     "set -e",
     "mkdir -p '$releasePath'",
     "tar -xzf '$remoteArchive' -C '$releasePath'",
     "rm -f '$remoteArchive'",
     "chmod +x '$releasePath/scripts/deploy-server.sh'",
-    "PERLER_REMOTE_ROOT='$RemoteRoot' PERLER_DATA_DIR='$DataDir' PORT='$Port' '$releasePath/scripts/deploy-server.sh' '$releasePath'"
+    "rm -f '$remoteStatus' '$remoteLog'",
+    "nohup env PERLER_REMOTE_ROOT='$RemoteRoot' PERLER_DATA_DIR='$DataDir' PORT='$Port' '$releasePath/scripts/deploy-server.sh' '$releasePath' > '$remoteLog' 2>&1 < /dev/null &"
   ) -join " && "
   Invoke-Checked "ssh.exe" @($sshArgs + @($target, $remoteCommand))
+
+  $deploymentDeadline = (Get-Date).AddMinutes(12)
+  $deploymentState = "running"
+  while ((Get-Date) -lt $deploymentDeadline) {
+    Start-Sleep -Seconds 4
+    $deploymentState = (& ssh.exe @($sshArgs + @($target, "cat '$remoteStatus' 2>/dev/null || printf running"))).Trim()
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "  waiting for server reconnect..." -ForegroundColor DarkYellow
+      continue
+    }
+    if ($deploymentState -eq "success") {
+      break
+    }
+    if ($deploymentState -eq "failed") {
+      $remoteOutput = & ssh.exe @($sshArgs + @($target, "tail -n 40 '$remoteLog' 2>/dev/null || true"))
+      throw "Server deployment failed.`n$remoteOutput"
+    }
+    Write-Host "  server build in progress..." -ForegroundColor DarkGray
+  }
+
+  if ($deploymentState -ne "success") {
+    $remoteOutput = & ssh.exe @($sshArgs + @($target, "tail -n 40 '$remoteLog' 2>/dev/null || true"))
+    throw "Server deployment timed out.`n$remoteOutput"
+  }
 
   Write-Host "[5/5] Deployment complete: $releasePath" -ForegroundColor Green
 } finally {
