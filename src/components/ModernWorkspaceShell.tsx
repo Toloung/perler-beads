@@ -114,7 +114,7 @@ export default function ModernWorkspaceShell({
               {saveStatus === 'saving' ? '保存中' : '保存'}
             </button>
             <button type="button" onClick={onShare} disabled={!hasCanvas} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
-              分享
+              备份
             </button>
             <button type="button" onClick={onSaveAs} disabled={!hasCanvas} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
               另存
@@ -149,7 +149,7 @@ export default function ModernWorkspaceShell({
                       <span className="text-gray-400 dark:text-gray-500">·</span>
                       <button type="button" onClick={onOpenProjects} className="font-medium text-[#c4684a] transition-colors active:text-[#d97757]">我的项目</button>
                       <span className="text-gray-400 dark:text-gray-500">·</span>
-                      <button type="button" onClick={onImportShare} className="font-medium text-[#c4684a] transition-colors active:text-[#d97757]">分享码导入</button>
+                      <button type="button" onClick={onImportShare} className="font-medium text-[#c4684a] transition-colors active:text-[#d97757]">备份码导入</button>
                     </div>
                     <button type="button" className="mt-4 text-xs text-gray-500 transition-colors active:text-[#d97757] dark:text-gray-400 sm:mt-5">
                       色板 {selectedColorSystem} · {colorCount} 色 · {statusText[saveStatus]}

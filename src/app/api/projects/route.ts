@@ -4,8 +4,9 @@ import { publishProjectEvent } from '../../../lib/projectEvents';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
-  return NextResponse.json({ projects: listProjects() });
+export async function GET(request: NextRequest) {
+  const archived = new URL(request.url).searchParams.get('archived') === '1';
+  return NextResponse.json({ projects: listProjects({ archived }) });
 }
 
 export async function POST(request: NextRequest) {

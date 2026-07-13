@@ -1,5 +1,7 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+
 import { ProjectSummary, SaveStatus, VersionConflict } from '../types/projectTypes';
 
 const statusLabels: Record<SaveStatus, string> = {
@@ -95,7 +97,7 @@ export function ProjectToolbar({
               onClick={onImportShare}
               className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              导入分享码
+              导入备份码
             </button>
           )}
           {onShare && (
@@ -105,7 +107,7 @@ export function ProjectToolbar({
               onClick={onShare}
               className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              分享
+              备份
             </button>
           )}
           <button
@@ -134,28 +136,53 @@ export function ProjectListModal({
   open,
   loading,
   projects,
+  archivedProjects,
   onClose,
   onRefresh,
   onOpen,
   onRename,
+  onDuplicate,
+  onArchive,
   onDelete,
 }: {
   open: boolean;
   loading: boolean;
   projects: ProjectSummary[];
+  archivedProjects: ProjectSummary[];
   onClose: () => void;
   onRefresh: () => void;
   onOpen: (id: string) => void;
   onRename: (project: ProjectSummary) => void;
+  onDuplicate: (project: ProjectSummary) => void;
+  onArchive: (project: ProjectSummary, archived: boolean) => void;
   onDelete: (project: ProjectSummary) => void;
 }) {
+  const [view, setView] = useState<'active' | 'archived'>('active');
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'updated' | 'opened' | 'name'>('updated');
+
+  const visibleProjects = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const source = view === 'active' ? projects : archivedProjects;
+    return source
+      .filter(project => !normalizedQuery || project.name.toLocaleLowerCase().includes(normalizedQuery))
+      .sort((a, b) => {
+        if (sort === 'name') return a.name.localeCompare(b.name, 'zh-CN');
+        const field = sort === 'opened' ? 'last_opened_at' : 'updated_at';
+        return new Date(b[field] || b.updated_at).getTime() - new Date(a[field] || a.updated_at).getTime();
+      });
+  }, [archivedProjects, projects, query, sort, view]);
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-2xl dark:bg-gray-800" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">我的项目</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">我的项目</h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">项目保存在你的私人服务器，可归档、复制和恢复。</p>
+          </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onRefresh} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
               刷新
@@ -165,12 +192,30 @@ export function ProjectListModal({
             </button>
           </div>
         </div>
+        <div className="border-b border-gray-100 p-4 dark:border-gray-800">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
+              <button type="button" onClick={() => setView('active')} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${view === 'active' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 dark:text-gray-300'}`}>
+                进行中 {projects.length}
+              </button>
+              <button type="button" onClick={() => setView('archived')} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${view === 'archived' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 dark:text-gray-300'}`}>
+                已归档 {archivedProjects.length}
+              </button>
+            </div>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目" className="min-w-36 flex-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
+            <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
+              <option value="updated">最近修改</option>
+              <option value="opened">最近打开</option>
+              <option value="name">项目名称</option>
+            </select>
+          </div>
+        </div>
         <div className="overflow-y-auto p-4">
           {loading && <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">加载中...</p>}
-          {!loading && projects.length === 0 && <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">还没有保存过项目</p>}
-          {!loading && projects.length > 0 && (
+          {!loading && visibleProjects.length === 0 && <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{query ? '没有匹配的项目' : view === 'archived' ? '还没有归档项目' : '还没有保存过项目'}</p>}
+          {!loading && visibleProjects.length > 0 && (
             <div className="grid gap-3">
-              {projects.map((project) => (
+              {visibleProjects.map((project) => (
                 <article key={project.id} className="grid grid-cols-[72px_1fr] gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                   <button type="button" onClick={() => onOpen(project.id)} className="h-16 w-16 overflow-hidden rounded-md border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
                     {project.thumbnail ? (
@@ -183,13 +228,20 @@ export function ProjectListModal({
                     <button type="button" onClick={() => onOpen(project.id)} className="block max-w-full truncate text-left text-sm font-semibold text-gray-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-300">
                       {project.name}
                     </button>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">版本 {project.version} · 更新于 {new Date(project.updated_at).toLocaleString()}</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">版本 {project.version} · 修改于 {new Date(project.updated_at).toLocaleString()}</p>
+                    {project.last_opened_at && <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">最近打开 {new Date(project.last_opened_at).toLocaleString()}</p>}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button type="button" onClick={() => onOpen(project.id)} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
                         打开
                       </button>
                       <button type="button" onClick={() => onRename(project)} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
                         重命名
+                      </button>
+                      <button type="button" onClick={() => onDuplicate(project)} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                        复制
+                      </button>
+                      <button type="button" onClick={() => onArchive(project, view === 'active')} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                        {view === 'active' ? '归档' : '恢复'}
                       </button>
                       <button type="button" onClick={() => onDelete(project)} className="rounded-md border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/30">
                         删除

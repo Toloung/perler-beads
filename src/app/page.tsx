@@ -146,6 +146,7 @@ import {
   isVersionConflict,
   renameProjectOnServer,
   restoreProjectVersionOnServer,
+  setProjectArchivedOnServer,
   updateProjectOnServer
 } from '../utils/projectApiClient';
 import { createShareCode, readShareCode } from '../utils/shareCode';
@@ -278,6 +279,7 @@ export default function Home() {
   const [currentProjectVersion, setCurrentProjectVersion] = useState<number>(0);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [archivedProjects, setArchivedProjects] = useState<ProjectSummary[]>([]);
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState<boolean>(false);
   const [isProjectsLoading, setIsProjectsLoading] = useState<boolean>(false);
   const [projectVersions, setProjectVersions] = useState<ProjectVersionSummary[]>([]);
@@ -288,7 +290,7 @@ export default function Home() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
-  const [shareModalInitialPanel, setShareModalInitialPanel] = useState<SharePanel>('share');
+  const [shareModalInitialPanel, setShareModalInitialPanel] = useState<SharePanel>('export');
   const [shareCode, setShareCode] = useState<string>('');
   const [isShareCodeGenerating, setIsShareCodeGenerating] = useState<boolean>(false);
   const [isImageEditorOpen, setIsImageEditorOpen] = useState<boolean>(false);
@@ -307,7 +309,7 @@ export default function Home() {
   const lastSavedSnapshotRef = useRef<string>('');
   const latestStateSnapshotRef = useRef<string>('');
 
-  const openShareModal = useCallback((panel: SharePanel = 'share') => {
+  const openShareModal = useCallback((panel: SharePanel = 'export') => {
     setShareModalInitialPanel(panel);
     setIsShareModalOpen(true);
   }, []);
@@ -1010,7 +1012,12 @@ export default function Home() {
   const refreshProjects = useCallback(async () => {
     setIsProjectsLoading(true);
     try {
-      setProjects(await fetchProjects());
+      const [active, archived] = await Promise.all([
+        fetchProjects(),
+        fetchProjects({ archived: true }),
+      ]);
+      setProjects(active);
+      setArchivedProjects(archived);
     } catch (error) {
       console.error('加载项目列表失败:', error);
       showToast('加载项目列表失败');
@@ -1170,6 +1177,33 @@ export default function Home() {
     }
   }, [currentProjectId, refreshProjects, showToast]);
 
+  const handleDuplicateProject = useCallback(async (project: ProjectSummary) => {
+    try {
+      const source = await fetchProject(project.id);
+      await createProjectOnServer({
+        name: `${source.name} 副本`,
+        thumbnail: source.thumbnail,
+        state_json: source.state_json,
+      });
+      refreshProjects();
+      showToast('项目副本已创建');
+    } catch (error) {
+      console.error('复制项目失败:', error);
+      showToast('复制项目失败');
+    }
+  }, [refreshProjects, showToast]);
+
+  const handleArchiveProject = useCallback(async (project: ProjectSummary, archived: boolean) => {
+    try {
+      await setProjectArchivedOnServer(project.id, archived);
+      refreshProjects();
+      showToast(archived ? '项目已归档' : '项目已恢复');
+    } catch (error) {
+      console.error('更新项目归档状态失败:', error);
+      showToast('项目状态更新失败');
+    }
+  }, [refreshProjects, showToast]);
+
   const handleDeleteProject = useCallback(async (project: ProjectSummary) => {
     if (!window.confirm(`确定删除“${project.name}”吗？`)) return;
 
@@ -1200,34 +1234,33 @@ export default function Home() {
       const code = await createShareCode({
         name: options.name?.trim() || currentProjectName.trim() || '未命名项目',
         state: buildProjectState(),
-        password: options.visibility === 'private' ? options.password : undefined,
       });
       setShareCode(code);
       await navigator.clipboard?.writeText(code);
-      showToast('分享码已生成');
+      showToast('备份码已生成');
     } catch (error) {
-      console.error('生成分享码失败:', error);
-      showToast('生成分享码失败');
+      console.error('生成备份码失败:', error);
+      showToast('生成备份码失败');
     } finally {
       setIsShareCodeGenerating(false);
     }
   }, [mappedPixelData, gridDimensions, currentProjectName, buildProjectState, showToast]);
 
-  const handleImportShareCode = useCallback(async (code: string, password?: string) => {
+  const handleImportShareCode = useCallback(async (code: string) => {
     try {
-      const sharedProject = await readShareCode(code, password);
+      const sharedProject = await readShareCode(code);
       restoreProjectState(sharedProject.state, {
         id: null,
-        name: `${sharedProject.name || '分享作品'} 副本`,
+        name: `${sharedProject.name || '备份项目'} 副本`,
         version: 0,
       });
       setSaveStatus('dirty');
       setHasUnsavedChanges(true);
       setIsShareModalOpen(false);
-      showToast('分享码已导入');
+      showToast('备份码已导入');
     } catch (error) {
-      console.error('导入分享码失败:', error);
-      showToast(error instanceof Error ? error.message : '导入分享码失败');
+      console.error('导入备份码失败:', error);
+      showToast(error instanceof Error ? error.message : '导入备份码失败');
     }
   }, [restoreProjectState, showToast]);
 
@@ -1411,7 +1444,7 @@ export default function Home() {
       void (async () => {
         try {
           const event = JSON.parse((message as MessageEvent).data) as {
-            type: 'created' | 'updated' | 'renamed' | 'deleted' | 'restored';
+            type: 'created' | 'updated' | 'renamed' | 'deleted' | 'restored' | 'archived';
             projectId: string;
             version: number;
             name: string;
@@ -3314,17 +3347,20 @@ export default function Home() {
           onSave={() => persistProject()}
           onSaveAs={() => persistProject({ saveAs: true })}
           onDownload={() => setIsDownloadSettingsOpen(true)}
-          onShare={() => openShareModal('share')}
+          onShare={() => openShareModal('export')}
           onImportShare={() => openShareModal('import')}
         />
         <ProjectListModal
           open={isProjectsModalOpen}
           loading={isProjectsLoading}
           projects={projects}
+          archivedProjects={archivedProjects}
           onClose={() => setIsProjectsModalOpen(false)}
           onRefresh={refreshProjects}
           onOpen={handleOpenProject}
           onRename={handleRenameProject}
+          onDuplicate={handleDuplicateProject}
+          onArchive={handleArchiveProject}
           onDelete={handleDeleteProject}
         />
         <ConflictModal
@@ -3473,8 +3509,8 @@ export default function Home() {
             <button type="button" onClick={() => persistProject()} disabled={!mappedPixelData || !gridDimensions || saveStatus === 'saving'} className="min-h-10 rounded-xl bg-[#d97757] px-3 text-xs font-semibold text-white transition-colors active:bg-[#c4684a] disabled:bg-[#d97757]/40 disabled:text-white/70 sm:min-h-[44px] sm:px-4">
               {saveStatus === 'saving' ? '保存中' : '保存'}
             </button>
-            <button type="button" onClick={() => openShareModal('share')} disabled={!mappedPixelData || !gridDimensions} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
-              分享
+            <button type="button" onClick={() => openShareModal('export')} disabled={!mappedPixelData || !gridDimensions} className="hidden min-h-10 rounded-xl bg-white/50 px-2.5 text-xs font-medium text-gray-700 transition-colors active:bg-white/70 disabled:opacity-40 dark:bg-white/5 dark:text-gray-200 dark:active:bg-white/10 sm:block sm:min-h-[44px] sm:px-3">
+              备份
             </button>
           </div>
         </div>
@@ -3709,7 +3745,7 @@ export default function Home() {
             onOpenProjects={handleOpenProjects}
             onEditImage={() => setIsImageEditorOpen(true)}
             onCanvasTools={() => setIsCanvasToolsOpen(true)}
-            onShare={() => openShareModal('share')}
+            onShare={() => openShareModal('export')}
             onImportShare={() => openShareModal('import')}
             onNameChange={(name) => {
               setCurrentProjectName(name);
@@ -4334,7 +4370,7 @@ export default function Home() {
                 历史与备份
               </button>
               <button type="button" onClick={() => openShareModal('import')} disabled={!mappedPixelData || !gridDimensions} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors active:bg-white disabled:opacity-45 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200">
-                分享码导入/导出
+                备份码导入/导出
               </button>
             </div>
           </section>
@@ -4551,10 +4587,13 @@ export default function Home() {
         open={isProjectsModalOpen}
         loading={isProjectsLoading}
         projects={projects}
+        archivedProjects={archivedProjects}
         onClose={() => setIsProjectsModalOpen(false)}
         onRefresh={refreshProjects}
         onOpen={handleOpenProject}
         onRename={handleRenameProject}
+        onDuplicate={handleDuplicateProject}
+        onArchive={handleArchiveProject}
         onDelete={handleDeleteProject}
       />
 

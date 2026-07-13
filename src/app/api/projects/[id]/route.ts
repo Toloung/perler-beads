@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteProject, getProject, renameProject, updateProject } from '../../../../lib/projectsDb';
+import { deleteProject, markProjectOpened, renameProject, setProjectArchived, updateProject } from '../../../../lib/projectsDb';
 import { publishProjectEvent } from '../../../../lib/projectEvents';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-  const project = getProject(id);
+  const project = markProjectOpened(id);
 
   if (!project) {
     return NextResponse.json({ error: 'PROJECT_NOT_FOUND' }, { status: 404 });
@@ -67,14 +67,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const project = renameProject(id, body.name);
+    const project = typeof body.archived === 'boolean'
+      ? setProjectArchived(id, body.archived)
+      : renameProject(id, body.name);
 
     if (!project) {
       return NextResponse.json({ error: 'PROJECT_NOT_FOUND' }, { status: 404 });
     }
 
     publishProjectEvent({
-      type: 'renamed',
+      type: body.archived === true ? 'archived' : body.archived === false ? 'restored' : 'renamed',
       projectId: project.id,
       version: project.version,
       name: project.name,

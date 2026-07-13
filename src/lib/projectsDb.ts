@@ -20,6 +20,8 @@ type ProjectRow = {
   version: number;
   created_at: string;
   updated_at: string;
+  last_opened_at: string | null;
+  archived_at: string | null;
   deleted_at: string | null;
 };
 
@@ -64,6 +66,8 @@ function createSchema(database: Database.Database) {
       version INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      last_opened_at TEXT,
+      archived_at TEXT,
       deleted_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_projects_updated_at
@@ -83,6 +87,22 @@ function createSchema(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_project_versions_project_created
       ON project_versions(project_id, created_at DESC);
+  `);
+
+  const projectColumns = database.prepare('PRAGMA table_info(projects)').all() as Array<{ name: string }>;
+  if (!projectColumns.some(column => column.name === 'last_opened_at')) {
+    database.exec('ALTER TABLE projects ADD COLUMN last_opened_at TEXT');
+  }
+  if (!projectColumns.some(column => column.name === 'archived_at')) {
+    database.exec('ALTER TABLE projects ADD COLUMN archived_at TEXT');
+  }
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_projects_archived_updated
+      ON projects(archived_at, updated_at DESC)
+      WHERE deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_projects_last_opened
+      ON projects(last_opened_at DESC)
+      WHERE deleted_at IS NULL;
   `);
 
   database.exec(`
@@ -113,6 +133,8 @@ function rowToSummary(row: ProjectRow): ProjectSummary {
     version: row.version,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    last_opened_at: row.last_opened_at,
+    archived_at: row.archived_at,
   };
 }
 
@@ -173,9 +195,15 @@ function insertVersionSnapshot(database: Database.Database, input: {
     );
 }
 
-export function listProjects() {
+export function listProjects(options?: { archived?: boolean }) {
+  const archived = options?.archived === true;
   const rows = getProjectsDb()
-    .prepare('SELECT id, name, thumbnail, image_path, state_json, version, created_at, updated_at, deleted_at FROM projects WHERE deleted_at IS NULL ORDER BY updated_at DESC')
+    .prepare(`
+      SELECT id, name, thumbnail, image_path, state_json, version, created_at, updated_at, last_opened_at, archived_at, deleted_at
+      FROM projects
+      WHERE deleted_at IS NULL AND ${archived ? 'archived_at IS NOT NULL' : 'archived_at IS NULL'}
+      ORDER BY updated_at DESC
+    `)
     .all() as ProjectRow[];
 
   return rows.map(rowToSummary);
@@ -183,10 +211,18 @@ export function listProjects() {
 
 export function getProject(id: string) {
   const row = getProjectsDb()
-    .prepare('SELECT id, name, thumbnail, image_path, state_json, version, created_at, updated_at, deleted_at FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .prepare('SELECT id, name, thumbnail, image_path, state_json, version, created_at, updated_at, last_opened_at, archived_at, deleted_at FROM projects WHERE id = ? AND deleted_at IS NULL')
     .get(id) as ProjectRow | undefined;
 
   return row ? rowToDetail(row) : null;
+}
+
+export function markProjectOpened(id: string) {
+  const now = new Date().toISOString();
+  getProjectsDb()
+    .prepare('UPDATE projects SET last_opened_at = ? WHERE id = ? AND deleted_at IS NULL')
+    .run(now, id);
+  return getProject(id);
 }
 
 export function createProject(input: {
@@ -205,10 +241,10 @@ export function createProject(input: {
   database.transaction(() => {
     database
       .prepare(`
-        INSERT INTO projects (id, name, thumbnail, image_path, state_json, version, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        INSERT INTO projects (id, name, thumbnail, image_path, state_json, version, created_at, updated_at, last_opened_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
       `)
-      .run(id, name, thumbnail, imagePath, JSON.stringify(input.state_json), now, now);
+      .run(id, name, thumbnail, imagePath, JSON.stringify(input.state_json), now, now, now);
 
     insertVersionSnapshot(database, {
       project_id: id,
@@ -307,6 +343,35 @@ export function renameProject(id: string, name: string) {
   return getProject(id);
 }
 
+export function setProjectArchived(id: string, archived: boolean) {
+  const current = getProject(id);
+  if (!current) return null;
+
+  const database = getProjectsDb();
+  const now = new Date().toISOString();
+  const nextVersion = current.version + 1;
+  const action: ProjectVersionAction = archived ? 'archive' : 'restore';
+
+  database.transaction(() => {
+    database
+      .prepare('UPDATE projects SET archived_at = ?, version = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
+      .run(archived ? now : null, nextVersion, now, id);
+
+    insertVersionSnapshot(database, {
+      project_id: id,
+      version: nextVersion,
+      name: current.name,
+      thumbnail: current.thumbnail,
+      image_path: current.image_path,
+      state_json: current.state_json,
+      action,
+      created_at: now,
+    });
+  })();
+
+  return getProject(id);
+}
+
 export function deleteProject(id: string) {
   const current = getProject(id);
   if (!current) return null;
@@ -339,6 +404,8 @@ export function deleteProject(id: string) {
     version: nextVersion,
     created_at: current.created_at,
     updated_at: now,
+    last_opened_at: current.last_opened_at,
+    archived_at: current.archived_at,
   } satisfies ProjectSummary;
 }
 

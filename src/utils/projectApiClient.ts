@@ -18,8 +18,9 @@ async function readJson<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export async function fetchProjects(): Promise<ProjectSummary[]> {
-  const data = await readJson<{ projects: ProjectSummary[] }>(await fetch('/api/projects'));
+export async function fetchProjects(options?: { archived?: boolean }): Promise<ProjectSummary[]> {
+  const query = options?.archived ? '?archived=1' : '';
+  const data = await readJson<{ projects: ProjectSummary[] }>(await fetch(`/api/projects${query}`));
   return data.projects;
 }
 
@@ -72,6 +73,16 @@ export async function deleteProjectOnServer(id: string): Promise<void> {
   await readJson<{ ok: true }>(
     await fetch(`/api/projects/${id}`, {
       method: 'DELETE',
+    })
+  );
+}
+
+export async function setProjectArchivedOnServer(id: string, archived: boolean): Promise<ProjectDetail> {
+  return readJson<ProjectDetail>(
+    await fetch(`/api/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived }),
     })
   );
 }

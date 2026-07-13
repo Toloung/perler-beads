@@ -6,6 +6,7 @@ const actionLabels: Record<ProjectVersionSummary['action'], string> = {
   create: '创建',
   update: '保存',
   rename: '重命名',
+  archive: '归档',
   restore: '恢复',
   delete: '删除',
 };

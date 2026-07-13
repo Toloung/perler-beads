@@ -31,6 +31,8 @@ export interface ProjectSummary {
   version: number;
   created_at: string;
   updated_at: string;
+  last_opened_at: string | null;
+  archived_at: string | null;
 }
 
 export interface ProjectDetail extends ProjectSummary {
@@ -44,7 +46,7 @@ export interface VersionConflict {
   clientVersion: number;
 }
 
-export type ProjectVersionAction = 'create' | 'update' | 'rename' | 'restore' | 'delete';
+export type ProjectVersionAction = 'create' | 'update' | 'rename' | 'archive' | 'restore' | 'delete';
 
 export interface ProjectVersionSummary {
   project_id: string;

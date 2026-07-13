@@ -1,4 +1,4 @@
-export type ProjectEventType = 'created' | 'updated' | 'renamed' | 'deleted' | 'restored';
+export type ProjectEventType = 'created' | 'updated' | 'renamed' | 'archived' | 'deleted' | 'restored';
 
 export type ProjectEvent = {
   id: number;
