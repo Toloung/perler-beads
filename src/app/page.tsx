@@ -572,13 +572,16 @@ export default function Home() {
   const currentGridColors = useMemo(() => {
     if (!mappedPixelData) return [];
     // 使用hex值进行去重，避免多个MARD色号对应同一个目标色号系统值时产生重复key
-    const uniqueColorsMap = new Map<string, MappedPixel>();
+    const uniqueColorsMap = new Map<string, { key: string; color: string; count: number }>();
     mappedPixelData.flat().forEach(cell => {
       if (cell && cell.color && !cell.isExternal) {
         const hexKey = cell.color.toUpperCase();
-        if (!uniqueColorsMap.has(hexKey)) {
+        const existingColor = uniqueColorsMap.get(hexKey);
+        if (existingColor) {
+          existingColor.count += 1;
+        } else {
           // 存储hex值作为key，保持颜色信息
-          uniqueColorsMap.set(hexKey, { key: cell.key, color: cell.color });
+          uniqueColorsMap.set(hexKey, { key: cell.key, color: cell.color, count: 1 });
         }
       }
     });
@@ -590,7 +593,8 @@ export default function Home() {
       const displayKey = getColorKeyByHex(color.color.toUpperCase(), selectedColorSystem);
       return {
         key: displayKey,
-        color: color.color
+        color: color.color,
+        count: color.count,
       };
     });
 
@@ -3268,6 +3272,9 @@ export default function Home() {
       // 更新像素数据
       saveEditSnapshot();
       setMappedPixelData(newPixelData);
+      if (selectedColor?.color?.toUpperCase() === sourceColor.color.toUpperCase()) {
+        setSelectedColor({ key: targetColor.key, color: targetColor.color, isExternal: false });
+      }
 
       // 重新计算颜色统计
       if (colorCounts) {
@@ -3293,6 +3300,7 @@ export default function Home() {
       }
 
       console.log(`颜色替换完成：将 ${replaceCount} 个 ${sourceColor.key} 替换为 ${targetColor.key}`);
+      showToast(`已将 ${replaceCount} 颗 ${sourceColor.key} 替换为 ${targetColor.key}`);
     }
 
     // 退出替换模式
@@ -4408,6 +4416,7 @@ export default function Home() {
           showFullPalette={showFullPalette}
           onToggleFullPalette={handleToggleFullPalette}
           onColorSelect={handleColorSelect}
+          onReplaceColors={handleColorReplace}
           onExitManualMode={() => {
             setIsManualColoringMode(false);
             setManualEditTool('brush');

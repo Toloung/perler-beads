@@ -9,7 +9,7 @@ import { PixelLayer } from '../utils/layerUtils';
 
 export type ManualEditTool = 'pan' | 'brush' | 'eraser' | 'picker' | 'fill' | 'line' | 'rect' | 'select' | 'move' | 'paste';
 
-type ColorOption = { key: string; color: string };
+type ColorOption = { key: string; color: string; count?: number };
 
 type ManualEditDockProps = {
   activeTool: ManualEditTool;
@@ -37,6 +37,7 @@ type ManualEditDockProps = {
   showFullPalette: boolean;
   onToggleFullPalette: () => void;
   onColorSelect: (colorData: { key: string; color: string; isExternal?: boolean }) => void;
+  onReplaceColors: (sourceColor: ColorOption, targetColor: ColorOption) => void;
   onExitManualMode: () => void;
   onCanvasTools: () => void;
   onToggleMagnifier: () => void;
@@ -90,6 +91,7 @@ const icons = {
   eye: <ToolIcon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></ToolIcon>,
   lock: <ToolIcon><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></ToolIcon>,
   plus: <ToolIcon><path d="M12 5v14" /><path d="M5 12h14" /></ToolIcon>,
+  replace: <ToolIcon><path d="M7 7h11" /><path d="M15 3l4 4-4 4" /><path d="M17 17H6" /><path d="M9 13l-4 4 4 4" /></ToolIcon>,
 };
 
 const tools: Array<{ tool: ManualEditTool; label: string; title: string; icon: ReactNode }> = [
@@ -235,6 +237,7 @@ export default function ManualEditDock({
   showFullPalette,
   onToggleFullPalette,
   onColorSelect,
+  onReplaceColors,
   onExitManualMode,
   onCanvasTools,
   onToggleMagnifier,
@@ -256,6 +259,10 @@ export default function ManualEditDock({
   onClearSelection,
 }: ManualEditDockProps) {
   const [mobilePanel, setMobilePanel] = useState<'palette' | 'settings' | 'selection' | null>(null);
+  const [isReplaceOpen, setIsReplaceOpen] = useState(false);
+  const [replaceSource, setReplaceSource] = useState<ColorOption | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<ColorOption | null>(null);
+  const [replaceQuery, setReplaceQuery] = useState('');
   const paletteColors = showFullPalette ? fullPaletteColors : currentGridColors;
   const currentLabel = activeTool === 'eraser'
     ? '橡皮'
@@ -266,6 +273,74 @@ export default function ManualEditDock({
   const selectionSize = activeSelection
     ? `${Math.abs(activeSelection.endCol - activeSelection.startCol) + 1}x${Math.abs(activeSelection.endRow - activeSelection.startRow) + 1}`
     : null;
+  const replacementTargets = fullPaletteColors.filter((color) => {
+    const query = replaceQuery.trim().toLowerCase();
+    return !query || color.key.toLowerCase().includes(query) || color.color.toLowerCase().includes(query);
+  });
+
+  const closeReplace = () => {
+    setIsReplaceOpen(false);
+    setReplaceSource(null);
+    setReplaceTarget(null);
+    setReplaceQuery('');
+  };
+
+  const confirmReplace = () => {
+    if (!replaceSource || !replaceTarget || replaceSource.color.toUpperCase() === replaceTarget.color.toUpperCase()) return;
+    onReplaceColors(replaceSource, replaceTarget);
+    closeReplace();
+  };
+
+  const replacePanel = (
+    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-900/50 dark:bg-amber-950/25">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">批量替换色号</p>
+          <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-100/70">选择图纸中的源色号，再选择替换色号。</p>
+        </div>
+        <button type="button" onClick={closeReplace} className="grid h-8 w-8 place-items-center rounded-lg border border-amber-200 bg-white/80 text-amber-800 dark:border-amber-900 dark:bg-gray-900 dark:text-amber-100" title="关闭批量替换" aria-label="关闭批量替换">
+          {icons.close}
+        </button>
+      </div>
+
+      <div className="mt-3">
+        <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">1. 要替换的色号</p>
+        <div className="mt-2 grid max-h-32 grid-cols-5 gap-1.5 overflow-y-auto pr-1">
+          {currentGridColors.map((color) => {
+            const selected = replaceSource?.color.toUpperCase() === color.color.toUpperCase();
+            return (
+              <button key={`replace-source-${color.color}`} type="button" onClick={() => setReplaceSource(color)} className={`grid min-h-12 place-items-center rounded-lg border-2 px-1 text-[10px] font-bold transition-transform active:scale-95 ${selected ? 'border-[#d97757] ring-2 ring-[#d97757]/30' : 'border-white/80'}`} style={{ backgroundColor: color.color }} title={`${color.key}，${color.count || 0} 颗`}>
+                <span className="rounded bg-white/80 px-1 text-gray-800 shadow-sm">{color.key}</span>
+                <span className="rounded bg-white/80 px-1 text-[9px] font-medium text-gray-600">{color.count || 0}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">2. 替换为</p>
+          <input value={replaceQuery} onChange={(event) => setReplaceQuery(event.target.value)} placeholder="搜索色号" className="h-8 w-28 rounded-lg border border-amber-200 bg-white px-2 text-xs text-gray-800 outline-none focus:border-[#d97757] dark:border-amber-900 dark:bg-gray-900 dark:text-gray-100" />
+        </div>
+        <div className="mt-2 grid max-h-40 grid-cols-5 gap-1.5 overflow-y-auto pr-1">
+          {replacementTargets.map((color) => {
+            const isSource = replaceSource?.color.toUpperCase() === color.color.toUpperCase();
+            const selected = replaceTarget?.color.toUpperCase() === color.color.toUpperCase();
+            return (
+              <button key={`replace-target-${color.color}`} type="button" disabled={isSource} onClick={() => setReplaceTarget(color)} className={`grid min-h-10 place-items-center rounded-lg border-2 px-1 text-[10px] font-bold transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 ${selected ? 'border-[#d97757] ring-2 ring-[#d97757]/30' : 'border-white/80'}`} style={{ backgroundColor: color.color }} title={color.key}>
+                <span className="rounded bg-white/80 px-1 text-gray-800 shadow-sm">{color.key}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <button type="button" disabled={!replaceSource || !replaceTarget || replaceSource.color.toUpperCase() === replaceTarget.color.toUpperCase()} onClick={confirmReplace} className="mt-3 min-h-10 w-full rounded-xl bg-[#d97757] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#c4684a] disabled:cursor-not-allowed disabled:opacity-40">
+        {replaceSource && replaceTarget ? `将 ${replaceSource.key} 的 ${replaceSource.count || 0} 颗替换为 ${replaceTarget.key}` : '选择源色号和目标色号'}
+      </button>
+    </div>
+  );
 
   const paletteGrid = (
     <div className="grid max-h-52 grid-cols-5 gap-2 overflow-y-auto pr-1">
@@ -384,6 +459,11 @@ export default function ManualEditDock({
             <span>{selectedColorSystem}</span>
           </div>
           {paletteGrid}
+          <button type="button" onClick={() => setIsReplaceOpen((open) => !open)} className={`mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-colors ${isReplaceOpen ? 'border-[#d97757] bg-[#d97757] text-white' : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'}`}>
+            {icons.replace}
+            批量替换色号
+          </button>
+          {isReplaceOpen && replacePanel}
         </section>
 
         {activeSelection && (
@@ -458,6 +538,11 @@ export default function ManualEditDock({
                 </button>
               </div>
               {paletteGrid}
+              <button type="button" onClick={() => setIsReplaceOpen((open) => !open)} className={`mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-colors ${isReplaceOpen ? 'border-[#d97757] bg-[#d97757] text-white' : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'}`}>
+                {icons.replace}
+                批量替换色号
+              </button>
+              {isReplaceOpen && replacePanel}
             </>
           )}
 
