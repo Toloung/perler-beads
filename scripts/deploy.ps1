@@ -5,7 +5,7 @@ param(
   [string]$IdentityFile = "$HOME\.ssh\solara_tencent",
   [string]$RemoteRoot = "/opt/perler-beads",
   [string]$DataDir = "/data/perler",
-  [int]$Port = 3000,
+  [int]$Port = 5000,
   [switch]$SkipLocalBuild,
   [switch]$AllowDirty
 )

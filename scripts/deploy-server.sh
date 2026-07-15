@@ -4,7 +4,7 @@ set -Eeuo pipefail
 release_dir="${1:-}"
 remote_root="${PERLER_REMOTE_ROOT:-/opt/perler-beads}"
 data_dir="${PERLER_DATA_DIR:-/data/perler}"
-port="${PORT:-3000}"
+port="${PORT:-5000}"
 app_name="${PERLER_PM2_NAME:-perler-beads}"
 shared_dir="$remote_root/shared"
 env_file="$shared_dir/app.env"

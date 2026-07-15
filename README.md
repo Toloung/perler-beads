@@ -76,7 +76,7 @@ npm run build
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PORT` | `3000` | Next.js 监听端口 |
+| `PORT` | `5000` | 服务器部署时 Next.js 监听端口 |
 | `PERLER_DATA_DIR` | 项目内 `data/perler` | SQLite、备份和上传目录 |
 | `PERLER_APP_PASSWORD` | 无 | 访问密码，公网部署必须设置 |
 

@@ -28,7 +28,7 @@
   -IdentityFile "$HOME\.ssh\solara_tencent" `
   -RemoteRoot /opt/perler-beads `
   -DataDir /data/perler `
-  -Port 3000
+  -Port 5000
 ```
 
 默认要求已提交所有受版本控制的修改。测试未提交内容时可加 `-AllowDirty`，正式部署不建议这样做。只想跳过本地构建时可加 `-SkipLocalBuild`，服务器端构建和健康检查仍会执行。
@@ -47,7 +47,7 @@ chmod 700 /opt/perler-beads/shared /data/perler
 
 ```bash
 cat >/opt/perler-beads/shared/app.env <<'EOF'
-PORT=3000
+PORT=5000
 PERLER_DATA_DIR=/data/perler
 PERLER_APP_PASSWORD=请替换为强密码
 EOF
@@ -83,7 +83,7 @@ server {
     server_name your-domain.example;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -117,7 +117,7 @@ pm2 save
 pm2 status
 pm2 logs perler-beads --lines 100
 readlink -f /opt/perler-beads/current
-curl -I http://127.0.0.1:3000/login
+curl -I http://127.0.0.1:5000/login
 ```
 
 ## 数据备份
