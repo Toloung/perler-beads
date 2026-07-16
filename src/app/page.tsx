@@ -85,19 +85,6 @@ const fullBeadPalette: PaletteColor[] = Object.entries(mardToHexMapping)
 
 type ManualEditTool = import('../components/ManualEditDock').ManualEditTool;
 
-const manualEditTools: { tool: ManualEditTool; label: string; title: string }[] = [
-  { tool: 'pan', label: '拖拽', title: '拖拽画布进行平移' },
-  { tool: 'brush', label: '画笔', title: '单格上色，按住拖动可连续绘制' },
-  { tool: 'eraser', label: '橡皮', title: '单格擦除，按住拖动可连续擦除' },
-  { tool: 'picker', label: '取色', title: '从画布中选择颜色' },
-  { tool: 'fill', label: '填充', title: '填充相邻的同色区域' },
-  { tool: 'line', label: '直线', title: '点击起点，再点击终点' },
-  { tool: 'rect', label: '矩形', title: '点击起点，再点击对角点' },
-  { tool: 'select', label: '框选', title: '按住拖动画出选区' },
-  { tool: 'move', label: '移动', title: '按住已有选区并拖动到新位置' },
-  { tool: 'paste', label: '粘贴', title: '点击画布把剪贴板内容粘贴到目标位置' },
-];
-
 // ++ Add definition for background color keys ++
 
 // 1. 导入新组件
@@ -105,7 +92,6 @@ import PixelatedPreviewCanvas, { EditorViewport } from '../components/PixelatedP
 import CanvasMiniMap from '../components/CanvasMiniMap';
 import GridTooltip from '../components/GridTooltip';
 import CustomPaletteEditor from '../components/CustomPaletteEditor';
-import FloatingColorPalette from '../components/FloatingColorPalette';
 import FloatingToolbar from '../components/FloatingToolbar';
 import HistoryBackupModal from '../components/HistoryBackupModal';
 import MagnifierTool from '../components/MagnifierTool';
@@ -323,11 +309,6 @@ export default function Home() {
     if (!newActiveState) {
       setMagnifierSelectionArea(null);
     }
-  };
-
-  // 激活工具处理函数
-  const handleActivatePalette = () => {
-    setActiveFloatingTool('palette');
   };
 
   const handleActivateMagnifier = () => {
@@ -1079,7 +1060,7 @@ export default function Home() {
     }
   }, [showToast]);
 
-  const persistProject = useCallback(async (options?: { saveAs?: boolean; force?: boolean }) => {
+  const persistProject = useCallback(async (options?: { saveAs?: boolean; force?: boolean; autoSave?: boolean }) => {
     if (!mappedPixelData || !gridDimensions) {
       showToast('请先生成拼豆图纸');
       return;
@@ -1102,6 +1083,7 @@ export default function Home() {
             state_json: state,
             version: currentProjectVersion,
             force: options?.force,
+            createSnapshot: !options?.autoSave,
           });
 
       setCurrentProjectId(project.id);
@@ -1432,7 +1414,7 @@ export default function Home() {
     }
 
     const timer = window.setTimeout(() => {
-      persistProject();
+      void persistProject({ autoSave: true });
     }, 900);
 
     return () => window.clearTimeout(timer);
@@ -1670,30 +1652,6 @@ export default function Home() {
       setIsManualColoringMode(false);
       setSelectedColor(null);
       setIsEraseMode(false);
-    }
-  };
-
-  // 处理一键擦除模式切换
-  const handleEraseToggle = () => {
-    // 确保在手动上色模式下才能使用擦除功能
-    if (!isManualColoringMode) {
-      return;
-    }
-    
-    // 如果当前在颜色替换模式，先退出替换模式
-    if (colorReplaceState.isActive) {
-      setColorReplaceState({
-        isActive: false,
-        step: 'select-source'
-      });
-      setHighlightColorKey(null);
-    }
-    
-    setIsEraseMode(!isEraseMode);
-    // 如果开启擦除模式，取消选中的颜色
-    if (!isEraseMode) {
-      setSelectedColor(null);
-      setManualShapeStart(null);
     }
   };
 
@@ -3170,11 +3128,6 @@ export default function Home() {
     importPaletteInputRef.current?.click();
   };
 
-  // 新增：处理颜色高亮
-  const handleHighlightColor = (colorHex: string) => {
-    setHighlightColorKey(colorHex);
-  };
-
   // 新增：高亮完成回调
   const handleHighlightComplete = () => {
     setHighlightColorKey(null);
@@ -3205,28 +3158,6 @@ export default function Home() {
     setSelectedColor(colorData);
     setManualEditTool(colorData.key === TRANSPARENT_KEY ? 'eraser' : 'brush');
     setManualShapeStart(null);
-  };
-
-  // 新增：颜色替换相关处理函数
-  const handleColorReplaceToggle = () => {
-    setColorReplaceState(prev => {
-      if (prev.isActive) {
-        // 退出替换模式
-        return {
-          isActive: false,
-          step: 'select-source'
-        };
-      } else {
-        // 进入替换模式
-        // 只退出冲突的模式，但保持在手动上色模式下
-        setIsEraseMode(false);
-        setSelectedColor(null);
-        return {
-          isActive: true,
-          step: 'select-source'
-        };
-      }
-    });
   };
 
   // 新增：处理从画布选择源颜色
@@ -3981,101 +3912,6 @@ export default function Home() {
             <div className="w-full md:max-w-2xl">
               <canvas ref={originalCanvasRef} className="hidden"></canvas>
 
-              {/* ++ 手动编辑模式提示信息 ++ */}
-              {false && isManualColoringMode && mappedPixelData && gridDimensions && (
-                <div className="w-full mb-4 p-3 bg-blue-50 dark:bg-gray-800 rounded-lg shadow-sm border border-blue-100 dark:border-gray-700">
-                  <div className="flex justify-center">
-                    <div className="bg-blue-50 dark:bg-gray-700 border border-blue-100 dark:border-gray-600 rounded-lg p-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 text-xs text-gray-600 dark:text-gray-300 w-full sm:w-auto">
-                      <div className="flex items-center gap-1 w-full sm:w-auto">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                        <span>使用悬浮工具栏操作</span>
-                      </div>
-                      <span className="hidden sm:inline text-gray-300 dark:text-gray-500">|</span>
-                      <div className="flex items-center gap-1 w-full sm:w-auto">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        <span>推荐电脑操作，上色更精准</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {false && isManualColoringMode && mappedPixelData && gridDimensions && (
-                <div className="mb-4 w-full rounded-xl border border-gray-200 bg-white/90 p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800/90">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap gap-2">
-                      {manualEditTools.map(({ tool, label, title }) => (
-                        <button
-                          key={tool}
-                          type="button"
-                          onClick={() => {
-                            setManualEditTool(tool);
-                            setManualShapeStart(null);
-                            if (tool === 'brush' || tool === 'fill' || tool === 'line' || tool === 'rect' || tool === 'select' || tool === 'move' || tool === 'paste') {
-                              setIsEraseMode(false);
-                              setColorReplaceState({ isActive: false, step: 'select-source' });
-                            }
-                          }}
-                          title={title}
-                          className={`min-h-[36px] rounded-lg px-3 text-xs font-medium transition-colors ${
-                            manualEditTool === tool
-                              ? 'bg-[#d97757] text-white shadow-sm'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                      <span>当前</span>
-                      <span
-                        className="h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                        style={{ backgroundColor: manualEditTool === 'eraser' ? '#FFFFFF' : selectedColor?.color || '#FFFFFF' }}
-                      />
-                      <span>
-                        {manualEditTool === 'eraser'
-                          ? '橡皮'
-                          : selectedColor
-                            ? getColorKeyByHex(selectedColor?.color || '#FFFFFF', selectedColorSystem)
-                            : '未选颜色'}
-                      </span>
-                      {manualShapeStart && (
-                        <span className="rounded bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-                          已选起点 {(manualShapeStart?.col ?? 0) + 1},{(manualShapeStart?.row ?? 0) + 1}
-                        </span>
-                      )}
-                      {activeSelection && (
-                        <span className="rounded bg-blue-100 px-2 py-1 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
-                          选区 {Math.abs((activeSelection?.endCol ?? 0) - (activeSelection?.startCol ?? 0)) + 1}x{Math.abs((activeSelection?.endRow ?? 0) - (activeSelection?.startRow ?? 0)) + 1}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-200 pt-3 dark:border-gray-700">
-                    <button type="button" disabled={!activeSelection} onClick={handleCopyActiveSelection} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
-                      复制
-                    </button>
-                    <button type="button" disabled={!activeSelection} onClick={handleCutActiveSelection} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
-                      剪切
-                    </button>
-                    <button type="button" disabled={!selectionClipboard || !activeSelection} onClick={handlePasteAtSelection} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
-                      粘贴到选区
-                    </button>
-                    <button type="button" disabled={!activeSelection} onClick={handleDeleteActiveSelection} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 disabled:opacity-40 dark:border-red-800 dark:text-red-300">
-                      删除
-                    </button>
-                    <button type="button" disabled={!activeSelection} onClick={() => setActiveSelection(null)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
-                      取消选区
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* Canvas Preview Container */}
               {/* Apply dark mode styles */}
               <div className={
@@ -4507,30 +4343,6 @@ export default function Home() {
       />
 
       {/* 悬浮调色盘 */}
-      {false && isManualColoringMode && (
-        <FloatingColorPalette
-          colors={currentGridColors}
-          selectedColor={selectedColor}
-          onColorSelect={handleColorSelect}
-          selectedColorSystem={selectedColorSystem}
-          isEraseMode={isEraseMode}
-          onEraseToggle={handleEraseToggle}
-          fullPaletteColors={fullPaletteColors}
-          showFullPalette={showFullPalette}
-          onToggleFullPalette={handleToggleFullPalette}
-          colorReplaceState={colorReplaceState}
-          onColorReplaceToggle={handleColorReplaceToggle}
-          onColorReplace={handleColorReplace}
-          onHighlightColor={handleHighlightColor}
-          isOpen={isFloatingPaletteOpen}
-          onToggleOpen={() => setIsFloatingPaletteOpen(!isFloatingPaletteOpen)}
-          isActive={activeFloatingTool === 'palette'}
-          onActivate={handleActivatePalette}
-          canUndo={editHistory.length > 0}
-          onUndo={handleUndoEdit}
-        />
-      )}
-
       {/* 放大镜工具 */}
       {isManualColoringMode && (
         <>

@@ -49,12 +49,17 @@ export async function updateProjectOnServer(input: {
   state_json: ProjectState;
   version: number;
   force?: boolean;
+  createSnapshot?: boolean;
 }): Promise<ProjectDetail> {
+  const { createSnapshot, ...project } = input;
   return readJson<ProjectDetail>(
     await fetch(`/api/projects/${input.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        ...project,
+        create_snapshot: createSnapshot === true,
+      }),
     })
   );
 }

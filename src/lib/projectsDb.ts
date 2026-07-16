@@ -38,6 +38,12 @@ type ProjectVersionRow = {
 
 let db: Database.Database | null = null;
 
+export const PROJECT_SNAPSHOT_INTERVAL_MS = 30 * 1000;
+export const MAX_PROJECT_VERSION_SNAPSHOTS = 100;
+export const MAX_DAILY_DATABASE_BACKUPS = 30;
+export const MAX_MANUAL_DATABASE_BACKUPS = 12;
+let isEnsuringDailyBackup = false;
+
 export function getDataDir() {
   return process.env.PERLER_DATA_DIR || path.join(process.cwd(), 'data', 'perler');
 }
@@ -119,6 +125,10 @@ export function getProjectsDb() {
     db = new Database(getDbPath());
     db.pragma('journal_mode = WAL');
     createSchema(db);
+    pruneExistingProjectVersionSnapshots(db);
+  }
+
+  if (!isEnsuringDailyBackup) {
     ensureDailyBackup();
   }
 
@@ -193,13 +203,54 @@ function insertVersionSnapshot(database: Database.Database, input: {
       input.action,
       input.created_at
     );
+
+  pruneProjectVersionSnapshots(database, input.project_id);
+}
+
+function pruneProjectVersionSnapshots(database: Database.Database, projectId: string) {
+  database
+    .prepare(`
+      DELETE FROM project_versions
+      WHERE project_id = ?
+        AND version NOT IN (
+          SELECT version
+          FROM project_versions
+          WHERE project_id = ?
+          ORDER BY version DESC
+          LIMIT ?
+        )
+    `)
+    .run(projectId, projectId, MAX_PROJECT_VERSION_SNAPSHOTS);
+}
+
+function pruneExistingProjectVersionSnapshots(database: Database.Database) {
+  const projectIds = database
+    .prepare('SELECT DISTINCT project_id FROM project_versions')
+    .all() as Array<{ project_id: string }>;
+  const pruneAll = database.transaction(() => {
+    projectIds.forEach(({ project_id }) => pruneProjectVersionSnapshots(database, project_id));
+  });
+
+  pruneAll();
+}
+
+function shouldCreateProjectSnapshot(database: Database.Database, projectId: string, now: string, forceSnapshot: boolean) {
+  if (forceSnapshot) return true;
+
+  const latest = database
+    .prepare('SELECT created_at FROM project_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1')
+    .get(projectId) as { created_at?: string } | undefined;
+
+  if (!latest?.created_at) return true;
+  const elapsed = Date.parse(now) - Date.parse(latest.created_at);
+  return !Number.isFinite(elapsed) || elapsed >= PROJECT_SNAPSHOT_INTERVAL_MS;
 }
 
 export function listProjects(options?: { archived?: boolean }) {
   const archived = options?.archived === true;
   const rows = getProjectsDb()
     .prepare(`
-      SELECT id, name, thumbnail, image_path, state_json, version, created_at, updated_at, last_opened_at, archived_at, deleted_at
+      SELECT id, name, thumbnail, version, created_at, updated_at, last_opened_at, archived_at
       FROM projects
       WHERE deleted_at IS NULL AND ${archived ? 'archived_at IS NOT NULL' : 'archived_at IS NULL'}
       ORDER BY updated_at DESC
@@ -269,6 +320,7 @@ export function updateProject(input: {
   state_json: ProjectState;
   version: number;
   force?: boolean;
+  create_snapshot?: boolean;
 }) {
   const current = getProject(input.id);
   if (!current) {
@@ -286,6 +338,7 @@ export function updateProject(input: {
   const database = getProjectsDb();
   const now = new Date().toISOString();
   const nextVersion = current.version + 1;
+  const createSnapshot = shouldCreateProjectSnapshot(database, input.id, now, input.create_snapshot === true);
   const name = (input.name ?? current.name).trim() || current.name;
   const thumbnail = input.thumbnail ?? current.thumbnail;
   const imagePath = input.image_path ?? current.image_path;
@@ -299,16 +352,18 @@ export function updateProject(input: {
       `)
       .run(name, thumbnail, imagePath, JSON.stringify(input.state_json), nextVersion, now, input.id);
 
-    insertVersionSnapshot(database, {
-      project_id: input.id,
-      version: nextVersion,
-      name,
-      thumbnail,
-      image_path: imagePath,
-      state_json: input.state_json,
-      action: 'update',
-      created_at: now,
-    });
+    if (createSnapshot) {
+      insertVersionSnapshot(database, {
+        project_id: input.id,
+        version: nextVersion,
+        name,
+        thumbnail,
+        image_path: imagePath,
+        state_json: input.state_json,
+        action: 'update',
+        created_at: now,
+      });
+    }
   })();
 
   return { status: 'ok' as const, project: getProject(input.id)! };
@@ -489,6 +544,8 @@ export function createDatabaseBackup(label?: string) {
   const target = path.join(getBackupDir(), fileName);
   fs.copyFileSync(getDbPath(), target);
 
+  pruneDatabaseBackups();
+
   const stats = fs.statSync(target);
   return {
     name: fileName,
@@ -513,10 +570,29 @@ export function listDatabaseBackups() {
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
+function pruneBackups(backups: DatabaseBackupSummary[], maxBackups: number) {
+  backups.slice(maxBackups).forEach((backup) => {
+    fs.rmSync(path.join(getBackupDir(), backup.name), { force: true });
+  });
+}
+
+export function pruneDatabaseBackups() {
+  const backups = listDatabaseBackups();
+  pruneBackups(backups.filter(backup => backup.name.startsWith('daily-')), MAX_DAILY_DATABASE_BACKUPS);
+  pruneBackups(backups.filter(backup => !backup.name.startsWith('daily-')), MAX_MANUAL_DATABASE_BACKUPS);
+}
+
 export function ensureDailyBackup() {
+  if (isEnsuringDailyBackup) return null;
+
+  isEnsuringDailyBackup = true;
+  try {
   const marker = new Date().toISOString().slice(0, 10);
   const exists = listDatabaseBackups().some(backup => backup.name.startsWith(`daily-${marker}`));
   if (exists) return null;
 
   return createDatabaseBackup(`daily-${marker}`);
+  } finally {
+    isEnsuringDailyBackup = false;
+  }
 }

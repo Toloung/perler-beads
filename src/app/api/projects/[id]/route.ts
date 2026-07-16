@@ -31,6 +31,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       state_json: body.state_json,
       version: body.version,
       force: body.force === true,
+      create_snapshot: body.create_snapshot === true,
     });
 
     if (result.status === 'not-found') {
